@@ -26,7 +26,7 @@ print(report.bisect_markdown(res, [f"commit{i}" for i in range(a.commits)], ev))
 print(f"\nresult: {res.kind}  culprit={res.culprit}  window={res.window}  | expected culprit: commit{a.culprit}")
 print("\nevery probe vs ground truth:")
 for e in ev:
-    kind = "pair" if "pair_vs" in e else ("retry" if e.get("retry") else ("confirm" if e.get("confirm") else "probe"))
+    kind = "pair" if "pair_vs" in e else ("recheck" if e.get("recheck") else "retry" if e.get("retry") else ("confirm" if e.get("confirm") else "probe"))
     truth = "BAD" if e["index"] >= a.culprit else "clean"
     flag = "   <-- MISJUDGED" if (truth == "BAD") != (e["verdict"] == "bad") and e["verdict"] in ("bad", "good") else ""
     print(f"commit{e['index']:>2} truth={truth:5} {kind:7} -> {e['verdict']:12} "

@@ -72,12 +72,14 @@ def run_bisect(cfg, targets):
         if not todo:
             return out
         raw = measure_many(cfg.scaled(2.0) if confirm else cfg, {i: targets[i] for i in todo})
-        retry = []
+        retry, recheck = [], []
         for i in todo:
             d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
             evidence.append({"index": i, "confirm": confirm, **d})
             if d["verdict"] == "inconclusive" and not confirm:
                 retry.append(i)
+            elif d["verdict"] == "bad" and not confirm:
+                recheck.append(i)
             else:
                 out[i] = _label(d)
         if retry:                                      # one longer re-probe, like the gate
@@ -85,7 +87,17 @@ def run_bisect(cfg, targets):
             for i in retry:
                 d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
                 evidence.append({"index": i, "retry": True, **d})
-                out[i] = _label(d)
+                if d["verdict"] == "bad":
+                    recheck.append(i)
+                else:
+                    out[i] = _label(d)
+        for i in recheck:
+            # A "bad" can shrink the search window, and the baseline was measured earlier, so confirm it
+            # head-to-head against a baseline measured at the same time. Unconfirmed -> skip (noise).
+            raw = measure_many(cfg.scaled(2.0), {"base": targets[0], i: targets[i]})
+            d = judge([Rep.from_dict(x) for x in raw["base"]], [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
+            evidence.append({"index": i, "recheck": True, **d})
+            out[i] = "bad" if d["verdict"] == "bad" else "skip"
         return out
 
     def pair(lo, hi):
