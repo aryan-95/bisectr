@@ -38,8 +38,15 @@ def gate(config: str = "bisectr.yaml",
          pr: int = 0, post: bool = False, no_cache: bool = False):
     """Run candidate vs baseline probes side by side and print the verdict."""
     cfg = load(config)
+    if post and pr:
+        report.validate_pr(os.environ["GITHUB_REPOSITORY"], pr, os.environ["GITHUB_TOKEN"])
     if baseline == "auto":
         baseline = _auto_baseline(cfg, main_branch)
+    for ref in (candidate, baseline):
+        if ":" not in ref and not probe.image_exists(cfg, ref):
+            typer.echo(f"No image tagged {ref} in ECR. Commit your changes, then run ./scripts/push_images.sh "
+                       f"(it pushes an image for the current HEAD).")
+            raise typer.Exit(2)
     res = run_gate(cfg, (_image(cfg, candidate), _kv(cand_env)),
                    (_image(cfg, baseline), _kv(base_env)), use_cache=not no_cache)
     md = report.comment_markdown(res, cfg)

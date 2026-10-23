@@ -22,6 +22,7 @@ class Thresholds(BaseModel):
     min_agree: int = 2
     error_abs: float = 0.02
     cost_min_ratio: float = 1.15
+    min_delta_ms: float = 2.0     # p95 must also differ by this many ms (noise floor)
 
 
 class Cost(BaseModel):
@@ -57,6 +58,7 @@ class Config(BaseModel):
     replicas: int = 3
     max_probes: int = 24
     bisect_k: int = 3
+    max_parallel_tasks: int = 6   # keep <= Fargate vCPU quota / vCPU per task
     infra: Infra
 
     def scaled(self, factor: float) -> "Config":

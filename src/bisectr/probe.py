@@ -1,6 +1,6 @@
 """Register task definitions, launch Fargate probes, read results from CloudWatch Logs."""
 from __future__ import annotations
-import json, threading, time
+import json, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 
@@ -9,6 +9,7 @@ from botocore.exceptions import ClientError
 
 TASKS_LAUNCHED = 0
 _lock = threading.Lock()
+_ACTIVE = set()          # ARNs of probe tasks currently running (stopped on Ctrl+C)
 
 
 @lru_cache(maxsize=None)
@@ -66,15 +67,24 @@ def register(cfg, image: str, env: dict | None = None) -> str:
 def launch(cfg, task_def: str) -> str:
     global TASKS_LAUNCHED
     i = cfg.infra
-    r = _ecs(i.region).run_task(
-        cluster=i.cluster, taskDefinition=task_def, launchType="FARGATE", count=1,
-        networkConfiguration={"awsvpcConfiguration": {
-            "subnets": i.subnets, "securityGroups": [i.sg], "assignPublicIp": "ENABLED"}})
-    if r["failures"]:
-        raise RuntimeError(f"run_task failed: {r['failures']}")
+    for _ in range(40):                  # quota/capacity: wait for other tasks to finish (max ~10 min)
+        r = _ecs(i.region).run_task(
+            cluster=i.cluster, taskDefinition=task_def, launchType="FARGATE", count=1,
+            networkConfiguration={"awsvpcConfiguration": {
+                "subnets": i.subnets, "securityGroups": [i.sg], "assignPublicIp": "ENABLED"}})
+        if not r["failures"]:
+            break
+        reason = str(r["failures"])
+        if "vCPUs" not in reason and "capacity" not in reason.lower():
+            raise RuntimeError(f"run_task failed: {r['failures']}")
+        time.sleep(15)
+    else:
+        raise RuntimeError(f"run_task still failing after retries: {r['failures']}")
+    arn = r["tasks"][0]["taskArn"]
     with _lock:
         TASKS_LAUNCHED += 1
-    return r["tasks"][0]["taskArn"]
+        _ACTIVE.add(arn)
+    return arn
 
 
 def wait_and_read(cfg, arn: str) -> dict:
@@ -115,6 +125,7 @@ def run_one(cfg, task_def: str) -> dict:
         return wait_and_read(cfg, arn)
     finally:
         stop(cfg, arn)
+        _ACTIVE.discard(arn)
 
 
 def measure_many(cfg, specs: dict) -> dict:
@@ -123,8 +134,27 @@ def measure_many(cfg, specs: dict) -> dict:
     tds = {n: register(cfg, img, env) for n, (img, env) in specs.items()}
     out = {n: [] for n in specs}
     workers = max(1, len(specs) * cfg.replicas)
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(run_one, cfg, td): n for n, td in tds.items() for _ in range(cfg.replicas)}
+    sem = threading.Semaphore(max(1, cfg.max_parallel_tasks))
+
+    def guarded(td):
+        with sem:                      # never exceed the Fargate vCPU quota
+            return run_one(cfg, td)
+
+    total = len(specs) * cfg.replicas
+    print(f"[bisectr] launching {total} probe tasks (max {cfg.max_parallel_tasks} at once)...",
+          file=sys.stderr, flush=True)
+    ex = ThreadPoolExecutor(max_workers=workers)
+    try:
+        futs = {ex.submit(guarded, td): n for n, td in tds.items() for _ in range(cfg.replicas)}
+        done = 0
         for f in as_completed(futs):
             out[futs[f]].append(f.result())
+            done += 1
+            print(f"[bisectr]   {done}/{total} probe tasks finished", file=sys.stderr, flush=True)
+    except BaseException:
+        for arn in list(_ACTIVE):          # Ctrl+C or an error: never leave Fargate tasks running
+            stop(cfg, arn)
+        ex.shutdown(wait=False, cancel_futures=True)
+        raise
+    ex.shutdown(wait=True)
     return out

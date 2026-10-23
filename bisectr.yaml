@@ -1,0 +1,44 @@
+service: bisectr-demo
+port: 8000
+task:
+  cpu: 1024
+  memory: 2048
+  app_cpu: 512
+scenario:
+  rps: 20
+  seconds: 30
+  warmup_seconds: 5
+  endpoints:
+  - path: /users
+    weight: 3
+  - path: /orders
+    weight: 2
+thresholds:
+  alpha: 0.01
+  min_ratio: 1.25
+  min_agree: 2
+  error_abs: 0.02
+  cost_min_ratio: 1.15
+cost:
+  target_rps: 500
+  target_utilization: 0.6
+  on_cost_regression: fail
+pricing:
+  vcpu_hour: 0.04048
+  gb_hour: 0.004445
+replicas: 3
+max_probes: 24
+bisect_k: 2
+infra:
+  region: ap-south-1
+  cluster: bisectr
+  log_group: /bisectr/probe
+  exec_role: arn:aws:iam::196253396964:role/bisectr-exec
+  sg: sg-05dadfeeb667e2f02
+  subnets:
+  - subnet-0c56c4247007d3381
+  - subnet-0c4f79a0cae04a5cb
+  - subnet-02c5ba2c8dba5cc35
+  image_repo: 196253396964.dkr.ecr.ap-south-1.amazonaws.com/bisectr-demo
+  runner_image: 196253396964.dkr.ecr.ap-south-1.amazonaws.com/bisectr-runner:latest
+max_parallel_tasks: 8

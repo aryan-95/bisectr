@@ -32,19 +32,21 @@ def judge(base: list[Rep], cand: list[Rep], th) -> dict:
     c = np.concatenate([r.lat for r in cand])
     ratio = p95(c) / max(p95(b), 1e-6)
     p = float(mannwhitneyu(c, b, alternative="greater").pvalue)
+    delta = p95(c) - p95(b)
     base_med = float(np.median([p95(r.lat) for r in base]))
     agree = int(sum(p95(r.lat) / max(base_med, 1e-6) >= th.min_ratio for r in cand))
     err_delta = float(np.mean([r.err_rate for r in cand]) - np.mean([r.err_rate for r in base]))
 
     if err_delta > th.error_abs:
         v = "bad"
-    elif p < th.alpha and ratio >= th.min_ratio and agree >= th.min_agree:
+    elif p < th.alpha and ratio >= th.min_ratio and agree >= th.min_agree and delta >= th.min_delta_ms:
         v = "bad"
-    elif ratio < 1 + (th.min_ratio - 1) / 2:
+    elif ratio < 1 + (th.min_ratio - 1) / 2 or delta < th.min_delta_ms:
         v = "good"
     else:
         v = "inconclusive"
-    return {"verdict": v, "ratio": float(ratio), "p": p, "agree": agree, "err_delta": err_delta}
+    return {"verdict": v, "ratio": float(ratio), "p": p, "agree": agree, "err_delta": err_delta,
+            "delta_ms": float(delta)}
 
 
 def summarize(reps: list[Rep]) -> dict:

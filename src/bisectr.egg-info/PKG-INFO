@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: bisectr
+Version: 0.1.0
+Requires-Python: >=3.12
+Requires-Dist: boto3
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: httpx
+Requires-Dist: typer
+Requires-Dist: pydantic
+Requires-Dist: pyyaml
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: hypothesis; extra == "dev"

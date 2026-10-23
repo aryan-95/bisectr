@@ -25,7 +25,7 @@ def pick_points(lo, hi, k, skipped):
     return sorted({cand[len(cand) * j // (k + 1)] for j in range(1, k + 1)})
 
 
-def search(n, oracle, k=3, max_probes=24) -> Result:
+def search(n, oracle, k=3, max_probes=24, pair=None) -> Result:
     """oracle(indices, confirm) -> {index: good|bad|skip}. Index 0 is good, n-1 is bad."""
     if n < 2:
         return Result("not_reproducible")
@@ -49,7 +49,10 @@ def search(n, oracle, k=3, max_probes=24) -> Result:
     if hi - lo > 1:
         return Result("ambiguous", window=(lo, hi), probes=probes)
     c = oracle([lo, hi], True)                       # verify with 2x samples
-    if c.get(hi) == "bad" and c.get(lo) == "good":
+    # culprit must be bad; parent must not be bad; and when a head-to-head is available the
+    # culprit must be measurably slower than its parent in the SAME time window
+    parent_ok = (pair(lo, hi) == "bad") if pair else (c.get(lo) == "good")
+    if c.get(hi) == "bad" and c.get(lo) != "bad" and parent_ok:
         return Result("found", culprit=hi, window=(lo, hi), probes=probes)
     return Result("flaky", window=(lo, hi), probes=probes)
 
@@ -69,12 +72,14 @@ def run_bisect(cfg, targets):
         if not todo:
             return out
         raw = measure_many(cfg.scaled(2.0) if confirm else cfg, {i: targets[i] for i in todo})
-        retry = []
+        retry, recheck = [], []
         for i in todo:
             d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
             evidence.append({"index": i, "confirm": confirm, **d})
             if d["verdict"] == "inconclusive" and not confirm:
                 retry.append(i)
+            elif d["verdict"] == "bad" and not confirm:
+                recheck.append(i)
             else:
                 out[i] = _label(d)
         if retry:                                      # one longer re-probe, like the gate
@@ -82,7 +87,24 @@ def run_bisect(cfg, targets):
             for i in retry:
                 d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
                 evidence.append({"index": i, "retry": True, **d})
-                out[i] = _label(d)
+                if d["verdict"] == "bad":
+                    recheck.append(i)
+                else:
+                    out[i] = _label(d)
+        for i in recheck:
+            # A "bad" can shrink the search window, and the baseline was measured earlier, so confirm it
+            # head-to-head against a baseline measured at the same time. Unconfirmed -> skip (noise).
+            raw = measure_many(cfg.scaled(2.0), {"base": targets[0], i: targets[i]})
+            d = judge([Rep.from_dict(x) for x in raw["base"]], [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
+            evidence.append({"index": i, "recheck": True, **d})
+            out[i] = "bad" if d["verdict"] == "bad" else "skip"
         return out
 
-    return search(len(targets), oracle, k=cfg.bisect_k, max_probes=cfg.max_probes), evidence
+    def pair(lo, hi):
+        raw = measure_many(cfg.scaled(2.0), {lo: targets[lo], hi: targets[hi]})
+        d = judge([Rep.from_dict(x) for x in raw[lo]], [Rep.from_dict(x) for x in raw[hi]], cfg.thresholds)
+        evidence.append({"index": hi, "pair_vs": lo, **d})
+        return d["verdict"]
+
+    res = search(len(targets), oracle, k=cfg.bisect_k, max_probes=cfg.max_probes, pair=pair)
+    return res, evidence

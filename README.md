@@ -8,7 +8,7 @@ or more expensive to run. If a regression slips through, Bisectr binary-searches
 names the responsible commit.
 
 > **Status:** hackathon build. Every number in the results table must come from `eval/results.csv`,
-> produced by `bisectr eval` on real Fargate runs. Cells marked `TODO(measure)` have not been measured yet.
+> produced by `bisectr eval` on real Fargate runs.
 
 ## How it works
 
@@ -79,15 +79,17 @@ make eval        # prints the markdown table below
 
 | Metric | Result |
 |---|---|
-| Gate: regressions detected (excluding control) | TODO(measure) |
-| Gate: false positives on noise-only control | TODO(measure) |
-| Gate: cost regressions detected (cpu_hot_loop, payload_bloat) | TODO(measure) |
-| Bisect: exact culprit found | TODO(measure) |
-| Bisect: wrong culprit reported | TODO(measure) |
-| Bisect: ambiguous or flaky reported | TODO(measure) |
-| Median wall time per gate run (s) | TODO(measure) |
-| Median tasks per bisect | TODO(measure) |
-| Median est. AWS cost per gate run (USD) | TODO(measure) |
+| Gate: regressions detected (excluding control) | 15/15 |
+| Gate: false positives on noise-only control | 0/3 |
+| Gate: cost regressions detected (cpu_hot_loop, payload_bloat) | 6/6 |
+| Bisect: exact culprit found | 4/5 |
+| Bisect: wrong culprit reported | 0/5 |
+| Bisect: ambiguous or flaky reported | 1/5 |
+| Median wall time per gate run (s) | 94.1 |
+| Median tasks per bisect | 30 |
+| Median est. AWS cost per gate run (USD, from wall time) | 0.01 |
+
+_Measured on AWS Fargate (ap-south-1): 3 gate trials per scenario (6 scenarios incl. one noise-only control), 1 bisect trial(s) per regression scenario on a synthetic 12-commit history, `on_cost_regression: fail` for this run. The cost figure is an upper bound (all tasks x full wall time) at US East list prices. Raw rows: `eval/results.csv`._
 
 The metrics that matter most are the wrong-culprit and false-positive rates. An "ambiguous" answer is
 safe. A confident wrong commit or a spurious failing check destroys trust.

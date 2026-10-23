@@ -42,19 +42,65 @@ def comment_markdown(res: dict, cfg) -> str:
 
 
 def _h(token):
-    return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+    return {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
+
+
+def validate_pr(repo, pr, token):
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr}"
+    response = httpx.get(url, headers=_h(token), timeout=30.0)
+    if response.status_code == 404:
+        raise RuntimeError(
+            f"GitHub could not find pull request #{pr} in {repo}. "
+            "Check the repository and pull request number, and confirm the token can access the repository."
+        )
+    response.raise_for_status()
 
 
 def post_pr_comment(repo, pr, body, token):
     base = f"https://api.github.com/repos/{repo}/issues/{pr}/comments"
-    existing = httpx.get(base, headers=_h(token), params={"per_page": 100}).json()
-    mine = next((x for x in existing if MARKER in x.get("body", "")), None)
+
+    response = httpx.get(
+        base,
+        headers=_h(token),
+        params={"per_page": 100},
+        timeout=30.0,
+    )
+    response.raise_for_status()
+
+    existing = response.json()
+
+    if not isinstance(existing, list):
+        raise RuntimeError(
+            f"Unexpected GitHub API response when listing PR comments: "
+            f"{existing}"
+        )
+
+    mine = next(
+        (
+            comment
+            for comment in existing
+            if isinstance(comment, dict)
+            and MARKER in comment.get("body", "")
+        ),
+        None,
+    )
+
     if mine:
-        r = httpx.patch(f"https://api.github.com/repos/{repo}/issues/comments/{mine['id']}",
-                        headers=_h(token), json={"body": body})
+        response = httpx.patch(
+            f"https://api.github.com/repos/{repo}/issues/comments/{mine['id']}",
+            headers=_h(token),
+            json={"body": body},
+            timeout=30.0,
+        )
     else:
-        r = httpx.post(base, headers=_h(token), json={"body": body})
-    r.raise_for_status()
+        response = httpx.post(
+            base,
+            headers=_h(token),
+            json={"body": body},
+            timeout=30.0,
+        )
+
+    response.raise_for_status()
 
 
 def open_issue(repo, title, body, token):
@@ -74,5 +120,7 @@ def bisect_markdown(result, shas, evidence) -> str:
         head = "**Regression not reproducible under this scenario.**"
     rows = ["| commit | verdict | p95 ratio | p | replicas worse |", "|---|---|---|---|---|"]
     for e in evidence:
-        rows.append(f"| `{shas[e['index']][:10]}` | {e['verdict']} | {e['ratio']:.2f} | {e['p']:.3g} | {e['agree']} |")
+        c10 = shas[e["index"]][:10]
+        who = f"`{c10}` vs parent" if "pair_vs" in e else (f"`{c10}` recheck vs fresh baseline" if e.get("recheck") else f"`{c10}`")
+        rows.append(f"| {who} | {e['verdict']} | {e['ratio']:.2f} | {e['p']:.3g} | {e['agree']} |")
     return f"### Bisectr bisect result\n\n{head}\n\nProbes used: {result.probes}\n\n" + "\n".join(rows)

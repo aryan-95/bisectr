@@ -36,3 +36,9 @@ def test_one_slow_replica_is_not_bad():
     rng = np.random.default_rng(3)
     cand = [rep(rng, scale=2.0), rep(rng), rep(rng)]
     assert judge(reps(1), cand, TH)["verdict"] != "bad"
+
+
+def test_tiny_absolute_difference_is_good():
+    rng = np.random.default_rng(7)
+    mk = lambda ms: [Rep(rng.lognormal(np.log(ms), 0.25, 600), 0, 600, 0.001, 100.0) for _ in range(3)]
+    assert judge(mk(5.0), mk(5.9), TH)["verdict"] == "good"      # ratio ~1.18 but only ~1.4 ms
