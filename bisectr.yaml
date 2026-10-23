@@ -22,10 +22,10 @@ thresholds:
 cost:
   target_rps: 500
   target_utilization: 0.6
-  on_cost_regression: warn
+  on_cost_regression: fail
 pricing:
-  vcpu_hour: 25
-  gb_hour: 25
+  vcpu_hour: 0.04048
+  gb_hour: 0.004445
 replicas: 3
 max_probes: 24
 bisect_k: 2

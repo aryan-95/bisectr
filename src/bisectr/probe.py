@@ -66,12 +66,19 @@ def register(cfg, image: str, env: dict | None = None) -> str:
 def launch(cfg, task_def: str) -> str:
     global TASKS_LAUNCHED
     i = cfg.infra
-    r = _ecs(i.region).run_task(
-        cluster=i.cluster, taskDefinition=task_def, launchType="FARGATE", count=1,
-        networkConfiguration={"awsvpcConfiguration": {
-            "subnets": i.subnets, "securityGroups": [i.sg], "assignPublicIp": "ENABLED"}})
-    if r["failures"]:
-        raise RuntimeError(f"run_task failed: {r['failures']}")
+    for _ in range(40):                  # quota/capacity: wait for other tasks to finish (max ~10 min)
+        r = _ecs(i.region).run_task(
+            cluster=i.cluster, taskDefinition=task_def, launchType="FARGATE", count=1,
+            networkConfiguration={"awsvpcConfiguration": {
+                "subnets": i.subnets, "securityGroups": [i.sg], "assignPublicIp": "ENABLED"}})
+        if not r["failures"]:
+            break
+        reason = str(r["failures"])
+        if "vCPUs" not in reason and "capacity" not in reason.lower():
+            raise RuntimeError(f"run_task failed: {r['failures']}")
+        time.sleep(15)
+    else:
+        raise RuntimeError(f"run_task still failing after retries: {r['failures']}")
     with _lock:
         TASKS_LAUNCHED += 1
     return r["tasks"][0]["taskArn"]
@@ -123,8 +130,14 @@ def measure_many(cfg, specs: dict) -> dict:
     tds = {n: register(cfg, img, env) for n, (img, env) in specs.items()}
     out = {n: [] for n in specs}
     workers = max(1, len(specs) * cfg.replicas)
+    sem = threading.Semaphore(max(1, cfg.max_parallel_tasks))
+
+    def guarded(td):
+        with sem:                      # never exceed the Fargate vCPU quota
+            return run_one(cfg, td)
+
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(run_one, cfg, td): n for n, td in tds.items() for _ in range(cfg.replicas)}
+        futs = {ex.submit(guarded, td): n for n, td in tds.items() for _ in range(cfg.replicas)}
         for f in as_completed(futs):
             out[futs[f]].append(f.result())
     return out

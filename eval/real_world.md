@@ -3,7 +3,7 @@
 **Scope:** demo service with a 10-commit history (`scripts/make_demo_history.sh 10 6`), one image per
 commit on Fargate (ap-south-1), 3 replicas, k=2. The regression is a 30 ms sleep added to `/users` in
 commit 6. This is a synthetic regression in a demo app, not a real open-source service.
-TODO(measure): validate on one real service with a documented regression and fix commit.
+Not yet validated on a real third-party service (future work).
 
 ## Run 1: FLAKY (before the fix)
 The search converged on the correct window: commit 5 (`493ef372f8`, good) .. commit 6 (`6b0e3648e4`, bad).

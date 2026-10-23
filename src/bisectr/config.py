@@ -58,6 +58,7 @@ class Config(BaseModel):
     replicas: int = 3
     max_probes: int = 24
     bisect_k: int = 3
+    max_parallel_tasks: int = 6   # keep <= Fargate vCPU quota / vCPU per task
     infra: Infra
 
     def scaled(self, factor: float) -> "Config":

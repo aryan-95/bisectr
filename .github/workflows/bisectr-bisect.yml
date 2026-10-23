@@ -1,0 +1,40 @@
+name: bisectr-bisect
+on:
+  issue_comment: {types: [created]}
+  workflow_dispatch:
+    inputs:
+      good: {description: good SHA, required: true}
+      bad:  {description: bad SHA, required: true}
+permissions: {id-token: write, contents: read, issues: write, pull-requests: write}
+jobs:
+  bisect:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.comment.body, '/bisectr find') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: {role-to-assume: "${{ secrets.BISECTR_ROLE_ARN }}", aws-region: ap-south-1}
+      - id: range
+        env:
+          COMMENT: ${{ github.event.comment.body }}
+          GOOD_IN: ${{ inputs.good }}
+          BAD_IN: ${{ inputs.bad }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "good=$GOOD_IN" >> "$GITHUB_OUTPUT"; echo "bad=$BAD_IN" >> "$GITHUB_OUTPUT"
+          else
+            R=$(echo "$COMMENT" | sed -n 's|^/bisectr find \([0-9a-f]\{7,40\}\)\.\.\([0-9a-f]\{7,40\}\).*|\1 \2|p' | head -1)
+            set -- $R
+            [ -n "${1:-}" ] || { echo "usage: /bisectr find <good>..<bad>"; exit 1; }
+            echo "good=$1" >> "$GITHUB_OUTPUT"; echo "bad=$2" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: ./action
+        with:
+          mode: bisect
+          good: ${{ steps.range.outputs.good }}
+          bad: ${{ steps.range.outputs.bad }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
