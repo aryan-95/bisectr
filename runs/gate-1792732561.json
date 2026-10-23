@@ -1,0 +1,37 @@
+{
+  "verdict": "PASS",
+  "reasons": [],
+  "detail": {
+    "verdict": "good",
+    "ratio": 0.9754601226993865,
+    "p": 0.9999999999907121,
+    "agree": 0,
+    "err_delta": 0.0
+  },
+  "cost": {
+    "available": true,
+    "cpu_ratio": 1.0086386569980341,
+    "regression": false,
+    "tasks_base": 2,
+    "tasks_cand": 2,
+    "monthly_base": 0.0,
+    "monthly_cand": 0.0,
+    "delta": 0.0,
+    "needs_bigger_task": false,
+    "priced": false
+  },
+  "base": {
+    "p95": 4.89,
+    "err": 0.0,
+    "cpu_per_1000": 2.260175395833333,
+    "mem_mb": 34.2
+  },
+  "cand": {
+    "p95": 4.77,
+    "err": 0.0,
+    "cpu_per_1000": 2.2797002758333336,
+    "mem_mb": 34.2
+  },
+  "reprobed": true,
+  "replicas": 3
+}

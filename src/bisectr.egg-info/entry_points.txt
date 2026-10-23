@@ -1,0 +1,2 @@
+[console_scripts]
+bisectr = bisectr.cli:app

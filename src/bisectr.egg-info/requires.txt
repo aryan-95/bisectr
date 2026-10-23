@@ -1,0 +1,11 @@
+boto3
+numpy
+scipy
+httpx
+typer
+pydantic
+pyyaml
+
+[dev]
+pytest
+hypothesis

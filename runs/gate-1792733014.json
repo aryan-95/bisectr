@@ -1,0 +1,40 @@
+{
+  "verdict": "FAIL",
+  "reasons": [
+    "latency",
+    "cost"
+  ],
+  "detail": {
+    "verdict": "bad",
+    "ratio": 5.171480144404332,
+    "p": 2.6595048990325482e-146,
+    "agree": 3,
+    "err_delta": 0.0
+  },
+  "cost": {
+    "available": true,
+    "cpu_ratio": 5.5304500027218175,
+    "regression": true,
+    "tasks_base": 3,
+    "tasks_cand": 14,
+    "monthly_base": 0.0,
+    "monthly_cand": 0.0,
+    "delta": 0.0,
+    "needs_bigger_task": false,
+    "priced": false
+  },
+  "base": {
+    "p95": 5.54,
+    "err": 0.0,
+    "cpu_per_1000": 2.8755285333333336,
+    "mem_mb": 34.2
+  },
+  "cand": {
+    "p95": 28.65,
+    "err": 0.0,
+    "cpu_per_1000": 15.902966785,
+    "mem_mb": 34.2
+  },
+  "reprobed": false,
+  "replicas": 3
+}

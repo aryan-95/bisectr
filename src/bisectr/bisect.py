@@ -25,7 +25,7 @@ def pick_points(lo, hi, k, skipped):
     return sorted({cand[len(cand) * j // (k + 1)] for j in range(1, k + 1)})
 
 
-def search(n, oracle, k=3, max_probes=24) -> Result:
+def search(n, oracle, k=3, max_probes=24, pair=None) -> Result:
     """oracle(indices, confirm) -> {index: good|bad|skip}. Index 0 is good, n-1 is bad."""
     if n < 2:
         return Result("not_reproducible")
@@ -49,7 +49,10 @@ def search(n, oracle, k=3, max_probes=24) -> Result:
     if hi - lo > 1:
         return Result("ambiguous", window=(lo, hi), probes=probes)
     c = oracle([lo, hi], True)                       # verify with 2x samples
-    if c.get(hi) == "bad" and c.get(lo) == "good":
+    # culprit must be bad; parent must not be bad; and when a head-to-head is available the
+    # culprit must be measurably slower than its parent in the SAME time window
+    parent_ok = (pair(lo, hi) == "bad") if pair else (c.get(lo) == "good")
+    if c.get(hi) == "bad" and c.get(lo) != "bad" and parent_ok:
         return Result("found", culprit=hi, window=(lo, hi), probes=probes)
     return Result("flaky", window=(lo, hi), probes=probes)
 
@@ -85,4 +88,11 @@ def run_bisect(cfg, targets):
                 out[i] = _label(d)
         return out
 
-    return search(len(targets), oracle, k=cfg.bisect_k, max_probes=cfg.max_probes), evidence
+    def pair(lo, hi):
+        raw = measure_many(cfg.scaled(2.0), {lo: targets[lo], hi: targets[hi]})
+        d = judge([Rep.from_dict(x) for x in raw[lo]], [Rep.from_dict(x) for x in raw[hi]], cfg.thresholds)
+        evidence.append({"index": hi, "pair_vs": lo, **d})
+        return d["verdict"]
+
+    res = search(len(targets), oracle, k=cfg.bisect_k, max_probes=cfg.max_probes, pair=pair)
+    return res, evidence

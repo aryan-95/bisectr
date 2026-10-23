@@ -26,3 +26,12 @@ def test_never_confident_and_wrong(n, data):
 
 def test_not_reproducible():
     assert search(5, lambda idxs, confirm=False: {i: "good" for i in idxs}).kind == "not_reproducible"
+
+
+def test_pair_verification_rescues_noisy_parent():
+    def oracle(idxs, confirm=False):
+        return {i: ("skip" if (confirm and i == 4) else ("bad" if i >= 5 else "good")) for i in idxs}
+    r = search(10, oracle, k=3, max_probes=50, pair=lambda lo, hi: "bad")
+    assert r.kind == "found" and r.culprit == 5
+    r2 = search(10, oracle, k=3, max_probes=50, pair=lambda lo, hi: "inconclusive")
+    assert r2.kind == "flaky"

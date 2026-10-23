@@ -74,5 +74,6 @@ def bisect_markdown(result, shas, evidence) -> str:
         head = "**Regression not reproducible under this scenario.**"
     rows = ["| commit | verdict | p95 ratio | p | replicas worse |", "|---|---|---|---|---|"]
     for e in evidence:
-        rows.append(f"| `{shas[e['index']][:10]}` | {e['verdict']} | {e['ratio']:.2f} | {e['p']:.3g} | {e['agree']} |")
+        who = f"`{shas[e['index']][:10]}` vs parent" if "pair_vs" in e else f"`{shas[e['index']][:10]}`"
+        rows.append(f"| {who} | {e['verdict']} | {e['ratio']:.2f} | {e['p']:.3g} | {e['agree']} |")
     return f"### Bisectr bisect result\n\n{head}\n\nProbes used: {result.probes}\n\n" + "\n".join(rows)
