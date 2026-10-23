@@ -38,6 +38,8 @@ def gate(config: str = "bisectr.yaml",
          pr: int = 0, post: bool = False, no_cache: bool = False):
     """Run candidate vs baseline probes side by side and print the verdict."""
     cfg = load(config)
+    if post and pr:
+        report.validate_pr(os.environ["GITHUB_REPOSITORY"], pr, os.environ["GITHUB_TOKEN"])
     if baseline == "auto":
         baseline = _auto_baseline(cfg, main_branch)
     for ref in (candidate, baseline):
