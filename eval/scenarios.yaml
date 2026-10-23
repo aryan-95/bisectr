@@ -1,0 +1,8 @@
+commits: 12          # synthetic history length for bisect trials
+scenarios:
+  - {name: n_plus_one,         env: {REGRESSION: n_plus_one},      cost: false}
+  - {name: slow_dependency,    env: {REGRESSION: slow_dependency}, cost: false}
+  - {name: cpu_hot_loop,       env: {REGRESSION: cpu_hot_loop},    cost: true}
+  - {name: error_rate,         env: {REGRESSION: error_rate},      cost: false}
+  - {name: payload_bloat,      env: {REGRESSION: payload_bloat},   cost: true}
+  - {name: control_noise_only, env: {},                            cost: false}

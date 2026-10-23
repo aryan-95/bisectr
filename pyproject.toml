@@ -1,0 +1,21 @@
+[project]
+name = "bisectr"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["boto3", "numpy", "scipy", "httpx", "typer", "pydantic", "pyyaml"]
+
+[project.optional-dependencies]
+dev = ["pytest", "hypothesis"]
+
+[project.scripts]
+bisectr = "bisectr.cli:app"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

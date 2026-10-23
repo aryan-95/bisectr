@@ -1,0 +1,35 @@
+name: bisectr
+description: Cost-and-performance gate for container services, with automatic bisect
+inputs:
+  mode:         {description: "gate or bisect", required: true}
+  config:       {description: "path to bisectr.yaml", default: bisectr.yaml}
+  candidate:    {description: "candidate commit SHA (gate)", default: ""}
+  baseline:     {description: "baseline SHA or auto", default: auto}
+  pr:           {description: "pull request number (gate)", default: "0"}
+  good:         {description: "known good SHA (bisect)", default: ""}
+  bad:          {description: "known bad SHA (bisect)", default: ""}
+  github-token: {description: "token for comments and issues", required: true}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with: {python-version: "3.12"}
+    - shell: bash
+      run: pip install "${{ github.action_path }}/.."
+    - shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        MODE: ${{ inputs.mode }}
+        CONFIG: ${{ inputs.config }}
+        CANDIDATE: ${{ inputs.candidate }}
+        BASELINE: ${{ inputs.baseline }}
+        PR: ${{ inputs.pr }}
+        GOOD: ${{ inputs.good }}
+        BAD: ${{ inputs.bad }}
+      run: |
+        if [ "$MODE" = "gate" ]; then
+          bisectr gate --config "$CONFIG" --candidate "$CANDIDATE" --baseline "$BASELINE" --pr "$PR" --post
+        else
+          bisectr bisect --config "$CONFIG" --good "$GOOD" --bad "$BAD" --post
+        fi
