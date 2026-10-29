@@ -1,0 +1,59 @@
+stages:
+  - test
+  - gate
+
+variables:
+  GIT_DEPTH: "0"
+  AWS_DEFAULT_REGION: "us-east-1"
+  DOCKER_HOST: "tcp://docker:2376"
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+
+unit-tests:
+  stage: test
+  image: python:3.12
+  script:
+    - python -m pip install -e ".[dev]"
+    - python -m pytest -q
+
+performance-gate:
+  stage: gate
+  image: python:3.12
+  services:
+    - name: docker:27-dind
+      alias: docker
+  id_tokens:
+    AWS_ID_TOKEN:
+      aud: sts.amazonaws.com
+  resource_group: bisectr-performance-gate
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+  before_script:
+    - python -m pip install . awscli
+    - ': "${BISECTR_GITLAB_ROLE_ARN:?Set the protected BISECTR_GITLAB_ROLE_ARN variable}"'
+    - printf '%s' "$AWS_ID_TOKEN" > "$CI_PROJECT_DIR/.aws-web-identity-token"
+    - chmod 600 "$CI_PROJECT_DIR/.aws-web-identity-token"
+    - export AWS_ROLE_ARN="$BISECTR_GITLAB_ROLE_ARN"
+    - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws-web-identity-token"
+  script:
+    - |
+      if [ "$CI_COMMIT_BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+        echo "No parent commit is available for the initial branch commit; skipping gate."
+        exit 0
+      fi
+    - |
+      IMAGE_REPO="$(python -c 'import yaml; print(yaml.safe_load(open("bisectr.yaml"))["infra"]["image_repo"])')"
+      RUNNER_IMAGE="$(python -c 'import yaml; print(yaml.safe_load(open("bisectr.yaml"))["infra"]["runner_image"])')"
+      REGISTRY="${IMAGE_REPO%%/*}"
+      aws ecr get-login-password --region "$AWS_DEFAULT_REGION" \
+        | docker login --username AWS --password-stdin "$REGISTRY"
+      docker build --platform linux/amd64 -t "${IMAGE_REPO}:${CI_COMMIT_SHA}" demo-app
+      docker push "${IMAGE_REPO}:${CI_COMMIT_SHA}"
+      RUNNER_REPO="${RUNNER_IMAGE%:*}"
+      docker build --platform linux/amd64 -t "${RUNNER_REPO}:latest" runner
+      docker tag "${RUNNER_REPO}:latest" "$RUNNER_IMAGE"
+      docker push "$RUNNER_IMAGE"
+      bisectr gate --candidate "$CI_COMMIT_SHA" --baseline "$CI_COMMIT_BEFORE_SHA"
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.aws-web-identity-token"

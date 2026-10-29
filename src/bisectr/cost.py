@@ -28,13 +28,20 @@ def cost_report(cfg, base, cand) -> dict:
     ratio = cc / cb
     agree = sum((r.cpu or 0) / cb >= cfg.thresholds.cost_min_ratio for r in cand)
     mem_peak = max(r.mem for r in cand)
+    priced = cfg.pricing.vcpu_hour > 0 and cfg.pricing.gb_hour > 0
+    if priced:
+        monthly_base = monthly(cfg, tb)
+        monthly_cand = monthly(cfg, tc)
+        monthly_delta = monthly_cand - monthly_base
+    else:
+        monthly_base = monthly_cand = monthly_delta = None
     return {
         "available": True,
         "cpu_ratio": ratio,
         "regression": bool(ratio >= cfg.thresholds.cost_min_ratio and agree >= cfg.thresholds.min_agree),
         "tasks_base": tb, "tasks_cand": tc,
-        "monthly_base": monthly(cfg, tb), "monthly_cand": monthly(cfg, tc),
-        "delta": monthly(cfg, tc) - monthly(cfg, tb),
+        "monthly_base": monthly_base, "monthly_cand": monthly_cand,
+        "delta": monthly_delta,
         "needs_bigger_task": bool(mem_peak > cfg.task.memory * 0.8),   # fit check, not scaling
-        "priced": cfg.pricing.vcpu_hour > 0,
+        "priced": priced,
     }

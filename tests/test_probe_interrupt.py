@@ -1,3 +1,4 @@
+import json
 import time
 import pytest
 from bisectr import probe
@@ -30,3 +31,26 @@ def test_ctrl_c_stops_running_tasks(monkeypatch):
     assert len(launched) == 6 and set(launched) <= set(stopped)
     time.sleep(0.8)
     assert not probe._ACTIVE
+
+
+def test_register_passes_health_path_and_endpoint_models_to_runner(monkeypatch):
+    cfg = Config(
+        health_path="/ready",
+        scenario={"endpoints": [{"path": "/search?q=x", "weight": 2}]},
+        infra=Infra(region="r", cluster="c", log_group="g", exec_role="e", sg="s",
+                    subnets=["a"], image_repo="x/y", runner_image="x/r"),
+    )
+    captured = {}
+
+    class FakeEcs:
+        def register_task_definition(self, **kwargs):
+            captured.update(kwargs)
+            return {"taskDefinition": {"taskDefinitionArn": "task-definition"}}
+
+    monkeypatch.setattr(probe, "_ecs", lambda _: FakeEcs())
+
+    assert probe.register(cfg, "image:sha") == "task-definition"
+    runner_env = {entry["name"]: entry["value"] for entry in captured["containerDefinitions"][1]["environment"]}
+    assert runner_env["HEALTH_PATH"] == "/ready"
+    assert json.loads(runner_env["ENDPOINTS"]) == [{"path": "/search?q=x", "weight": 2}]
+    assert "taskRoleArn" not in captured

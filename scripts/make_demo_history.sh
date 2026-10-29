@@ -5,13 +5,18 @@ set -euo pipefail
 N=${1:-10}; CULPRIT=${2:-6}
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 DEST=${DEST:-$SRC/../bisectr-demo-history}
-LOG=$SRC/../bisectr-shas.txt
-REGION=${REGION:-ap-south-1}
+LOG=${LOG:-$SRC/../bisectr-shas.txt}
+REGION=${REGION:-us-east-1}
+if [ -e "$DEST" ] || [ -e "$LOG" ]; then
+  echo "Refusing to overwrite existing demo output." >&2
+  echo "Choose fresh paths with DEST=/path/to/history LOG=/path/to/shas.txt." >&2
+  exit 2
+fi
 ACCT=$(aws sts get-caller-identity --query Account --output text)
 REG=$ACCT.dkr.ecr.$REGION.amazonaws.com
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REG" >/dev/null
 
-rm -rf "$DEST" "$LOG"; mkdir -p "$DEST"; cd "$DEST"
+mkdir -p "$DEST"; cd "$DEST"
 git init -q -b main
 git config user.email demo@bisectr.local; git config user.name bisectr-demo
 cp "$SRC/demo-app/Dockerfile" .

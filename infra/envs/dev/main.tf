@@ -1,11 +1,17 @@
 terraform {
+  required_version = ">= 1.10.0"
   required_providers {
     aws = { source = "hashicorp/aws", version = "~> 5.0" }
   }
+  backend "s3" {}
 }
 
-variable "region" { default = "ap-south-1" }
+variable "region" { default = "us-east-1" }
 provider "aws" { region = var.region }
+
+locals {
+  region_suffix = replace(var.region, "-", "")
+}
 
 data "aws_vpc" "default" { default = true }
 data "aws_subnets" "default" {
@@ -24,6 +30,28 @@ resource "aws_ecr_repository" "svc" {
 resource "aws_ecr_repository" "runner" {
   name         = "bisectr-runner"
   force_delete = true
+  image_scanning_configuration { scan_on_push = true }
+}
+
+resource "aws_ecr_lifecycle_policy" "recent_images" {
+  for_each = {
+    service = aws_ecr_repository.svc.name
+    runner  = aws_ecr_repository.runner.name
+  }
+
+  repository = each.value
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep the 100 most recently pushed images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 100
+      }
+      action = { type = "expire" }
+    }]
+  })
 }
 
 resource "aws_ecs_cluster" "c" { name = "bisectr" }
@@ -47,7 +75,7 @@ resource "aws_security_group" "probe" {
 
 # execution role only (pull image, write logs). Probe tasks get NO task role.
 resource "aws_iam_role" "exec" {
-  name = "bisectr-exec"
+  name = "bisectr-exec-${local.region_suffix}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -69,11 +97,11 @@ resource "aws_ssm_parameter" "kill_switch" {
   value = "true"
 }
 
-output "region"      { value = var.region }
-output "svc_repo"    { value = aws_ecr_repository.svc.repository_url }
+output "region" { value = var.region }
+output "svc_repo" { value = aws_ecr_repository.svc.repository_url }
 output "runner_repo" { value = aws_ecr_repository.runner.repository_url }
-output "cluster"     { value = aws_ecs_cluster.c.name }
-output "subnets"     { value = data.aws_subnets.default.ids }
-output "sg"          { value = aws_security_group.probe.id }
-output "exec_role"   { value = aws_iam_role.exec.arn }
-output "log_group"   { value = aws_cloudwatch_log_group.probe.name }
+output "cluster" { value = aws_ecs_cluster.c.name }
+output "subnets" { value = data.aws_subnets.default.ids }
+output "sg" { value = aws_security_group.probe.id }
+output "exec_role" { value = aws_iam_role.exec.arn }
+output "log_group" { value = aws_cloudwatch_log_group.probe.name }

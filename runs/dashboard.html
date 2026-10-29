@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bisectr run history</title>
+  <style>
+    body { color:#1f2937; font:16px/1.5 system-ui,sans-serif; margin:2rem auto; max-width:1100px; padding:0 1rem; }
+    table { border-collapse:collapse; width:100%; }
+    th,td { border-bottom:1px solid #d1d5db; padding:.6rem; text-align:left; }
+    th { background:#f3f4f6; }
+    .fail { color:#b91c1c; font-weight:700; } .warn { color:#a16207; font-weight:700; }
+    .pass { color:#047857; font-weight:700; }
+  </style>
+</head>
+<body>
+  <h1>Bisectr run history</h1>
+  <p>Recent gate, suite, validation, bisect, and fix-verification outcomes.</p>
+  <section><h2>Candidate p95 latency trend</h2><svg role="img" aria-label="Candidate p95 latency trend" viewBox="0 0 720 180" style="max-width:100%;height:auto"><polyline points="50.0,149.2 142.9,149.7 235.7,67.3 328.6,44.4 421.4,40.0 514.3,43.7 607.1,150.0 700.0,68.1" fill="none" stroke="#2563eb" stroke-width="3"/><circle cx="50.0" cy="149.2" r="4" fill="#2563eb"><title>2026-10-29 16:22 UTC  9461c85f4a: 4.65 ms</title></circle><circle cx="142.9" cy="149.7" r="4" fill="#2563eb"><title>2026-10-29 16:24 UTC  9461c85f4a: 4.47 ms</title></circle><circle cx="235.7" cy="67.3" r="4" fill="#2563eb"><title>2026-10-29 16:26 UTC  9461c85f4a: 35.26 ms</title></circle><circle cx="328.6" cy="44.4" r="4" fill="#2563eb"><title>2026-10-29 19:18 UTC  go-httpbin: 43.82 ms</title></circle><circle cx="421.4" cy="40.0" r="4" fill="#2563eb"><title>2026-10-29 19:19 UTC  go-httpbin: 45.48 ms</title></circle><circle cx="514.3" cy="43.7" r="4" fill="#2563eb"><title>2026-10-29 19:21 UTC  go-httpbin: 44.08 ms</title></circle><circle cx="607.1" cy="150.0" r="4" fill="#2563eb"><title>2026-10-29 19:25 UTC  f8aa2351fd: 4.35 ms</title></circle><circle cx="700.0" cy="68.1" r="4" fill="#2563eb"><title>2026-10-29 19:27 UTC  f8aa2351fd: 34.96 ms</title></circle><text x="50" y="174">4.35 ms</text><text x="570" y="174">45.48 ms</text></svg></section>
+  <section><h2>Estimated monthly cost delta trend</h2><svg role="img" aria-label="Estimated monthly cost delta trend" viewBox="0 0 720 180" style="max-width:100%;height:auto"><polyline points="50.0,40.0 212.5,40.0 375.0,40.0 537.5,150.0 700.0,40.0" fill="none" stroke="#7c3aed" stroke-width="3"/><circle cx="50.0" cy="40.0" r="4" fill="#7c3aed"><title>2026-10-29 19:18 UTC  go-httpbin: 0.00 USD/mo</title></circle><circle cx="212.5" cy="40.0" r="4" fill="#7c3aed"><title>2026-10-29 19:19 UTC  go-httpbin: 0.00 USD/mo</title></circle><circle cx="375.0" cy="40.0" r="4" fill="#7c3aed"><title>2026-10-29 19:21 UTC  go-httpbin: 0.00 USD/mo</title></circle><circle cx="537.5" cy="150.0" r="4" fill="#7c3aed"><title>2026-10-29 19:25 UTC  f8aa2351fd: -37.87 USD/mo</title></circle><circle cx="700.0" cy="40.0" r="4" fill="#7c3aed"><title>2026-10-29 19:27 UTC  f8aa2351fd: 0.00 USD/mo</title></circle><text x="50" y="174">-37.87 USD/mo</text><text x="570" y="174">0.00 USD/mo</text></svg></section>
+  <table><thead><tr><th>Created</th><th>Type</th><th>Profile</th>
+  <th>Outcome</th><th>Candidate</th><th>Candidate p95</th><th>Estimated cost delta</th></tr></thead>
+  <tbody><tr><td>2026-10-29 19:27 UTC</td><td>gate</td><td></td><td class="fail">FAIL</td><td><code>f8aa2351fd</code></td><td>34.96 ms</td><td>0.00 USD/mo</td></tr><tr><td>2026-10-29 19:25 UTC</td><td>gate</td><td></td><td class="pass">PASS</td><td><code>f8aa2351fd</code></td><td>4.35 ms</td><td>-37.87 USD/mo</td></tr><tr><td>2026-10-29 19:21 UTC</td><td>validate</td><td></td><td class="fail">FAIL</td><td><code>go-httpbin</code></td><td>44.08 ms</td><td>0.00 USD/mo</td></tr><tr><td>2026-10-29 19:19 UTC</td><td>validate</td><td></td><td class="fail">FAIL</td><td><code>go-httpbin</code></td><td>45.48 ms</td><td>0.00 USD/mo</td></tr><tr><td>2026-10-29 19:18 UTC</td><td>validate</td><td></td><td class="fail">FAIL</td><td><code>go-httpbin</code></td><td>43.82 ms</td><td>0.00 USD/mo</td></tr><tr><td>2026-10-29 16:39 UTC</td><td>bisect</td><td></td><td class="found">found</td><td><code>n/a</code></td><td>n/a</td><td>n/a</td></tr><tr><td>2026-10-29 16:26 UTC</td><td>gate</td><td></td><td class="fail">FAIL</td><td><code>9461c85f4a</code></td><td>35.26 ms</td><td>n/a</td></tr><tr><td>2026-10-29 16:24 UTC</td><td>gate</td><td></td><td class="pass">PASS</td><td><code>9461c85f4a</code></td><td>4.47 ms</td><td>n/a</td></tr><tr><td>2026-10-29 16:22 UTC</td><td>gate</td><td></td><td class="pass">PASS</td><td><code>9461c85f4a</code></td><td>4.65 ms</td><td>n/a</td></tr></tbody></table>
+</body>
+</html>

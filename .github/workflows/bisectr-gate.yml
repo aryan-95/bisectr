@@ -1,0 +1,117 @@
+name: bisectr-gate
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bisectr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-candidate:
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out pull request source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate-source
+          persist-credentials: false
+
+      - name: Build candidate image without AWS credentials
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          docker build --platform linux/amd64 \
+            --tag "bisectr-candidate:${CANDIDATE_SHA}" \
+            candidate-source/demo-app
+          docker save \
+            --output "$RUNNER_TEMP/bisectr-candidate.tar" \
+            "bisectr-candidate:${CANDIDATE_SHA}"
+
+      - name: Upload candidate image
+        uses: actions/upload-artifact@v4
+        with:
+          name: bisectr-candidate-image
+          path: ${{ runner.temp }}/bisectr-candidate.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  run-gate:
+    needs: build-candidate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+      pull-requests: write
+      checks: write
+    steps:
+      - name: Check out trusted base revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install trusted Bisectr code
+        run: python -m pip install .
+
+      - name: Download candidate image
+        uses: actions/download-artifact@v4
+        with:
+          name: bisectr-candidate-image
+          path: ${{ runner.temp }}
+
+      - name: Load candidate image
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: docker load --input "$RUNNER_TEMP/bisectr-candidate.tar"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.BISECTR_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Push candidate image to ECR
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          IMAGE_REPO="$(python -c 'import yaml; print(yaml.safe_load(open("bisectr.yaml"))["infra"]["image_repo"])')"
+          REGISTRY="${IMAGE_REPO%%/*}"
+          aws ecr get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin "$REGISTRY"
+          docker tag "bisectr-candidate:${CANDIDATE_SHA}" "${IMAGE_REPO}:${CANDIDATE_SHA}"
+          docker push "${IMAGE_REPO}:${CANDIDATE_SHA}"
+
+      - name: Run performance gate and report on the pull request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: >-
+          bisectr gate
+          --config bisectr.yaml
+          --candidate "$CANDIDATE_SHA"
+          --baseline "$BASELINE_SHA"
+          --pr "$PR_NUMBER"
+          --post

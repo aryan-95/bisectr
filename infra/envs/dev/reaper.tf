@@ -5,7 +5,7 @@ data "archive_file" "reaper" {
 }
 
 resource "aws_iam_role" "reaper" {
-  name = "bisectr-reaper"
+  name = "bisectr-reaper-${local.region_suffix}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -22,16 +22,33 @@ resource "aws_iam_role_policy_attachment" "reaper_logs" {
 }
 
 resource "aws_iam_role_policy" "reaper" {
-  name = "bisectr-reaper"
+  name = "bisectr-reaper-${local.region_suffix}"
   role = aws_iam_role.reaper.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = ["ecs:ListTasks", "ecs:DescribeTasks", "ecs:StopTask",
-      "ecs:ListTaskDefinitions", "ecs:DeregisterTaskDefinition"]
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Effect    = "Allow"
+        Action    = "ecs:ListTasks"
+        Resource  = "*"
+        Condition = { ArnEquals = { "ecs:cluster" = aws_ecs_cluster.c.arn } }
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ecs:ListTaskDefinitions"
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ecs:DescribeTasks", "ecs:StopTask"]
+        Resource = "arn:aws:ecs:${local.reg}:${local.acct}:task/${aws_ecs_cluster.c.name}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ecs:DeregisterTaskDefinition"
+        Resource = "arn:aws:ecs:${local.reg}:${local.acct}:task-definition/bisectr-probe:*"
+      }
+    ]
   })
 }
 

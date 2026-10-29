@@ -1,0 +1,153 @@
+name: bisectr-alarm
+
+on:
+  workflow_dispatch:
+    inputs:
+      good:
+        description: Previous main image commit
+        required: true
+        type: string
+      bad:
+        description: Current main image commit
+        required: true
+        type: string
+      alarm_name:
+        description: CloudWatch alarm that triggered this investigation
+        required: true
+        type: string
+      event_id:
+        description: EventBridge event ID for deduplication and traceability
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: bisectr-alarm-main
+  cancel-in-progress: false
+
+jobs:
+  investigate-and-propose-revert:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bisectr
+        run: python -m pip install .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.BISECTR_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Bisect the alarm-associated main image range
+        id: bisect
+        env:
+          GOOD_SHA: ${{ inputs.good }}
+          BAD_SHA: ${{ inputs.bad }}
+          ALARM_NAME: ${{ inputs.alarm_name }}
+          EVENT_ID: ${{ inputs.event_id }}
+        run: |
+          set -euo pipefail
+          if ! bisectr bisect --config bisectr.yaml \
+            --good "$GOOD_SHA" --bad "$BAD_SHA" \
+            --result-json bisect-result.json; then
+            echo "Bisect command failed; no revert will be prepared." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json, os
+          result = json.load(open("bisect-result.json", encoding="utf-8"))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"kind={result['kind']}\n")
+              output.write(f"culprit={result.get('culprit') or ''}\n")
+          PY
+
+      - name: Open an investigation issue when no culprit is verified
+        if: steps.bisect.outputs.kind != 'found'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GOOD_SHA: ${{ inputs.good }}
+          BAD_SHA: ${{ inputs.bad }}
+          ALARM_NAME: ${{ inputs.alarm_name }}
+          EVENT_ID: ${{ inputs.event_id }}
+          RESULT_KIND: ${{ steps.bisect.outputs.kind }}
+        run: |
+          gh issue create \
+            --title "Bisectr alarm investigation: $ALARM_NAME ($RESULT_KIND)" \
+            --body "CloudWatch alarm \`$ALARM_NAME\` entered ALARM. Event: \`$EVENT_ID\`. Bisect could not verify one culprit in \`$GOOD_SHA..$BAD_SHA\` (result: \`$RESULT_KIND\`). No revert was created."
+
+      - name: Prepare and performance-check a revert
+        if: steps.bisect.outputs.kind == 'found'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GOOD_SHA: ${{ inputs.good }}
+          BAD_SHA: ${{ inputs.bad }}
+          ALARM_NAME: ${{ inputs.alarm_name }}
+          EVENT_ID: ${{ inputs.event_id }}
+          CULPRIT: ${{ steps.bisect.outputs.culprit }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$CULPRIT" "$BAD_SHA"
+          git merge-base --is-ancestor "$BAD_SHA" HEAD
+          PARENT_COUNT="$(git rev-list --parents -n 1 "$CULPRIT" | wc -w)"
+          if [ "$PARENT_COUNT" -ne 2 ]; then
+            gh issue create \
+              --title "Bisectr found a merge/root commit; manual revert required" \
+              --body "Alarm: \`$ALARM_NAME\` (event \`$EVENT_ID\`). Bisect identified \`$CULPRIT\`, which is not a single-parent commit. No automatic revert was attempted."
+            exit 1
+          fi
+          SHORT_SHA="${CULPRIT:0:10}"
+          BRANCH="bisectr/revert-${SHORT_SHA}-${EVENT_ID:0:8}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "$BRANCH"
+          git revert --no-edit "$CULPRIT"
+
+          IMAGE_REPO="$(python -c 'import yaml; print(yaml.safe_load(open("bisectr.yaml"))["infra"]["image_repo"])')"
+          REGISTRY="${IMAGE_REPO%%/*}"
+          FIXED_SHA="$(git rev-parse HEAD)"
+          aws ecr get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin "$REGISTRY"
+          docker build --platform linux/amd64 \
+            --tag "${IMAGE_REPO}:${FIXED_SHA}" demo-app
+          docker push "${IMAGE_REPO}:${FIXED_SHA}"
+
+          if ! bisectr verify-fix --config bisectr.yaml \
+            --baseline "$GOOD_SHA" --candidate "$FIXED_SHA"; then
+            gh issue create \
+              --title "Bisectr could not verify revert of ${SHORT_SHA}" \
+              --body "Alarm: \`$ALARM_NAME\` (event \`$EVENT_ID\`). Bisect identified \`$CULPRIT\`, but the proposed revert image did not PASS against known-good \`$GOOD_SHA\`. No revert PR was opened. Review probe logs, conflicts, and other changes before acting."
+            exit 1
+          fi
+
+          git push --set-upstream origin "$BRANCH"
+          cat > "$RUNNER_TEMP/revert-pr.md" <<EOF
+          ## Automated performance regression investigation
+
+          CloudWatch alarm: \`$ALARM_NAME\`  
+          Event ID: \`$EVENT_ID\`  
+          Bisect culprit: \`$CULPRIT\`  
+          Known-good comparison: \`$GOOD_SHA\`
+
+          Bisectr verified the revert image with a PASS before opening this pull request. This PR is for human review and is not merged automatically. Recheck service health and related changes before merging.
+          EOF
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Bisectr: revert verified performance regression ${SHORT_SHA}" \
+            --body-file "$RUNNER_TEMP/revert-pr.md"
