@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bisectr run history</title>
+  <style>
+    body { color:#1f2937; font:16px/1.5 system-ui,sans-serif; margin:2rem auto; max-width:1100px; padding:0 1rem; }
+    table { border-collapse:collapse; width:100%; }
+    th,td { border-bottom:1px solid #d1d5db; padding:.6rem; text-align:left; }
+    th { background:#f3f4f6; }
+    .fail { color:#b91c1c; font-weight:700; } .warn { color:#a16207; font-weight:700; }
+    .pass { color:#047857; font-weight:700; }
+  </style>
+</head>
+<body>
+  <h1>Bisectr run history</h1>
+  <p>Recent gate, suite, validation, bisect, and fix-verification outcomes.</p>
+  <section><h2>Candidate p95 latency trend</h2><svg role="img" aria-label="Candidate p95 latency trend" viewBox="0 0 720 180" style="max-width:100%;height:auto"><polyline points="50.0,149.4 375.0,150.0 700.0,40.0" fill="none" stroke="#2563eb" stroke-width="3"/><circle cx="50.0" cy="149.4" r="4" fill="#2563eb"><title>2026-10-29 16:22 UTC  9461c85f4a: 4.65 ms</title></circle><circle cx="375.0" cy="150.0" r="4" fill="#2563eb"><title>2026-10-29 16:24 UTC  9461c85f4a: 4.47 ms</title></circle><circle cx="700.0" cy="40.0" r="4" fill="#2563eb"><title>2026-10-29 16:26 UTC  9461c85f4a: 35.26 ms</title></circle><text x="50" y="174">4.47 ms</text><text x="570" y="174">35.26 ms</text></svg></section>
+  <section><h2>Estimated monthly cost delta trend</h2><p>No priced measurements yet.</p></section>
+  <table><thead><tr><th>Created</th><th>Type</th><th>Profile</th>
+  <th>Outcome</th><th>Candidate</th><th>Candidate p95</th><th>Estimated cost delta</th></tr></thead>
+  <tbody><tr><td>2026-10-29 16:39 UTC</td><td>bisect</td><td></td><td class="found">found</td><td><code>n/a</code></td><td>n/a</td><td>n/a</td></tr><tr><td>2026-10-29 16:26 UTC</td><td>gate</td><td></td><td class="fail">FAIL</td><td><code>9461c85f4a</code></td><td>35.26 ms</td><td>n/a</td></tr><tr><td>2026-10-29 16:24 UTC</td><td>gate</td><td></td><td class="pass">PASS</td><td><code>9461c85f4a</code></td><td>4.47 ms</td><td>n/a</td></tr><tr><td>2026-10-29 16:22 UTC</td><td>gate</td><td></td><td class="pass">PASS</td><td><code>9461c85f4a</code></td><td>4.65 ms</td><td>n/a</td></tr></tbody></table>
+</body>
+</html>
