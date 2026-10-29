@@ -57,6 +57,22 @@ def test_scenario_rejects_unsupported_http_method():
         Scenario(endpoints=[{"path": "/orders", "weight": 1, "method": "TRACE"}])
 
 
+def test_endpoint_rejects_regression_budgets_out_of_range():
+    with pytest.raises(ValueError):
+        Scenario(endpoints=[{"path": "/users", "weight": 1, "max_p95_ratio": 0.9}])
+    with pytest.raises(ValueError):
+        Scenario(endpoints=[{"path": "/users", "weight": 1, "max_error_delta": 1.1}])
+
+
+def test_config_rejects_duplicate_scenario_profile_names():
+    infra = Infra(region="r", cluster="c", log_group="g", exec_role="e", sg="s",
+                  subnets=["a"], image_repo="x/y", runner_image="x/r")
+    with pytest.raises(ValueError, match="must be unique"):
+        Config(infra=infra, scenarios=[
+            Scenario(profile="normal"), Scenario(profile="normal", rps=80),
+        ])
+
+
 def test_task_rejects_app_cpu_above_task_cpu():
     with pytest.raises(ValueError, match="cannot exceed"):
         Task(cpu=512, app_cpu=1024)

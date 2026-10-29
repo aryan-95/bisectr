@@ -101,9 +101,14 @@ def list_runs(cfg, kind=None, limit=20):
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
 
-    kinds = ("gate", "bisect", "validate") if kind is None else (kind,)
-    if any(run_kind not in {"gate", "bisect", "validate"} for run_kind in kinds):
-        raise ValueError("kind must be 'gate', 'bisect', 'validate', or None")
+    kinds = ("gate", "bisect", "validate", "suite", "verify-fix") if kind is None else (kind,)
+    if any(
+        run_kind not in {"gate", "bisect", "validate", "suite", "verify-fix"}
+        for run_kind in kinds
+    ):
+        raise ValueError(
+            "kind must be 'gate', 'bisect', 'validate', 'suite', 'verify-fix', or None"
+        )
 
     table = _local_or_cloud_table(cfg, "runs_table")
     if table:

@@ -53,6 +53,17 @@ The POST example is safe only when the target service is configured to accept di
 Keep credentials out of endpoint definitions; the probe tasks intentionally have no task role and the
 current configuration does not support secret injection into requests.
 
+For endpoint-level detection, set optional `max_p95_ratio` and `max_error_delta` values on endpoints.
+The runner records per-route latency and error samples, and the gate reports route-specific budget
+verdicts. A missing/under-sampled route should be treated as incomplete evidence, not proof of no
+regression. To run multiple profiles in one comparison, configure top-level `scenarios` and use:
+
+```bash
+bisectr suite --candidate CANDIDATE_IMAGE --baseline BASELINE_IMAGE
+```
+
+The suite fails when any selected profile fails and emits a report containing each profile result.
+
 `bisectr validate` is a measurement tool, not proof of production impact. This repository still
 requires an owner-supplied service and measured trials before it can claim validation on a
 third-party or production service.

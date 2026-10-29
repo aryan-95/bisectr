@@ -42,6 +42,7 @@ async def fire(c, endpoint, sched, out):
     else:
         method = endpoint.get("method", "GET")
         path, body = endpoint["path"], endpoint.get("body")
+    key = f"{method} {path}"
     try:
         if method == "GET" and body is None:
             r = await c.get(BASE + path)
@@ -51,7 +52,7 @@ async def fire(c, endpoint, sched, out):
     except httpx.HTTPError:
         ok = False
     # latency from the SCHEDULED send time -> no coordinated omission
-    out.append(((time.perf_counter() - sched) * 1000, ok))
+    out.append(((time.perf_counter() - sched) * 1000, ok, key))
 
 
 async def phase(c, secs, out):
@@ -89,14 +90,21 @@ async def main():
         cpu1, _ = await app_cpu_mem(c)
 
     n = len(out)
-    errors = sum(1 for _, ok in out if not ok)
+    errors = sum(1 for _, ok, _ in out if not ok)
     cpu_per_req = ((cpu1 - cpu0) / n) if cpu0 is not None and n else None
+    endpoints = {}
+    for latency, ok, key in out:
+        stats = endpoints.setdefault(key, {"n": 0, "errors": 0, "latencies_ms": []})
+        stats["n"] += 1
+        stats["errors"] += not ok
+        stats["latencies_ms"].append(round(latency, 2))
     result = {
         "n": n,
         "errors": errors,
-        "latencies_ms": [round(l, 2) for l, _ in out],
+        "latencies_ms": [round(latency, 2) for latency, _, _ in out],
         "cpu_s_per_req": cpu_per_req,
         "peak_mem_mb": round(state["peak"] / 1e6, 1),
+        "endpoint_metrics": endpoints,
     }
     print("BISECTR_RESULT " + json.dumps(result), flush=True)
 

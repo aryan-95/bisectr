@@ -30,3 +30,25 @@ def test_gate_comment_explains_profile_and_failed_thresholds():
 
     assert "checkout-mix" in markdown
     assert "Review the candidate's latency/error changes" in markdown
+
+
+def test_history_dashboard_escapes_run_content():
+    rendered = report.history_dashboard([{
+        "kind": "gate",
+        "created_at": 1_793_300_000,
+        "data": {
+            "inputs": {"candidate": "abcdef123456"},
+            "result": {
+                "verdict": "<script>alert(1)</script>",
+                "cand": {"p95": 12.3},
+                "cost": {"delta": 20.0},
+            },
+        },
+    }])
+
+    assert "<script>" not in rendered
+    assert "&lt;script&gt;" in rendered
+    assert "12.30 ms" in rendered
+    assert "20.00 USD/mo" in rendered
+    assert "abcdef1234" in rendered
+    assert "<svg" in rendered

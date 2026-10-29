@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: bisectr-main-image-state
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -18,6 +22,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -38,3 +44,6 @@ jobs:
 
       - name: Build and push images
         run: ./scripts/push_images.sh
+
+      - name: Record latest successful main image range
+        run: python scripts/update_main_build_range.py

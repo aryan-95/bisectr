@@ -77,3 +77,4 @@ def test_runner_sends_configured_method_and_json_body(monkeypatch):
         ("POST", "http://localhost:8000/orders", {"json": {"items": [1, 2]}})
     ]
     assert result[0][1] is True
+    assert result[0][2] == "POST /orders"

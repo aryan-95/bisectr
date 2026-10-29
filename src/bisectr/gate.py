@@ -36,13 +36,13 @@ def run_gate(cfg, cand, base, use_cache=True) -> dict:
         store.save(cfg, *base, base_raw)
     cand_raw = raw["cand"]
 
-    detail = judge(_reps(base_raw), _reps(cand_raw), cfg.thresholds)
+    detail = judge(_reps(base_raw), _reps(cand_raw), cfg.thresholds, cfg.scenario.endpoints)
     reprobed = False
     if detail["verdict"] == "inconclusive":            # one longer re-probe, both sides
         reprobed = True
         raw2 = measure_many(cfg.scaled(2.0), {"cand": cand, "base": base})
         base_raw, cand_raw = raw2["base"], raw2["cand"]
-        detail = judge(_reps(base_raw), _reps(cand_raw), cfg.thresholds)
+        detail = judge(_reps(base_raw), _reps(cand_raw), cfg.thresholds, cfg.scenario.endpoints)
 
     base_reps, cand_reps = _reps(base_raw), _reps(cand_raw)
     cost = cost_report(cfg, base_reps, cand_reps)
@@ -50,6 +50,10 @@ def run_gate(cfg, cand, base, use_cache=True) -> dict:
     reasons = []
     if detail["verdict"] == "bad":
         reasons.append("errors" if detail["err_delta"] > cfg.thresholds.error_abs else "latency")
+    for endpoint in detail.get("endpoints", []):
+        if endpoint["verdict"] == "bad":
+            measure = "errors" if endpoint["error_delta"] > endpoint["max_error_delta"] else "latency"
+            reasons.append(f"{endpoint['endpoint']} {measure}")
     verdict = {"bad": "FAIL", "good": "PASS", "inconclusive": "WARN"}[detail["verdict"]]
     if cost["regression"]:
         reasons.append("cost")

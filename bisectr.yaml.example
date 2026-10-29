@@ -10,8 +10,23 @@ scenario:
   seconds: 30
   warmup_seconds: 5
   endpoints:
-    - {path: /users, weight: 3}
+    - {path: /users, weight: 3, max_p95_ratio: 1.25, max_error_delta: 0.02}
     - {path: /orders, weight: 2, method: POST, body: {items: [{sku: demo, quantity: 1}]}}
+scenarios:
+  - profile: normal
+    rps: 20
+    seconds: 30
+    warmup_seconds: 5
+    endpoints:
+      - {path: /users, weight: 3, max_p95_ratio: 1.25}
+      - {path: /orders, weight: 2, method: POST, body: {items: [{sku: demo, quantity: 1}]}}
+  - profile: spike
+    rps: 80
+    seconds: 30
+    warmup_seconds: 5
+    endpoints:
+      - {path: /users, weight: 3, max_p95_ratio: 1.5}
+      - {path: /orders, weight: 2, method: POST, body: {items: [{sku: demo, quantity: 1}]}}
 thresholds: {alpha: 0.01, min_ratio: 1.25, min_agree: 2, error_abs: 0.02, cost_min_ratio: 1.15}
 cost: {target_rps: 500, target_utilization: 0.6, on_cost_regression: warn}
 pricing: {vcpu_hour: 0.0, gb_hour: 0.0}   # set from the AWS Fargate pricing page for your region

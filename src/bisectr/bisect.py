@@ -83,7 +83,8 @@ def run_bisect(cfg, targets):
     def head_to_head(lo, hi):
         """Measure two commits at the same time (2x samples) and judge hi against lo."""
         raw = measure_many(cfg.scaled(2.0), {lo: targets[lo], hi: targets[hi]})
-        return judge([Rep.from_dict(x) for x in raw[lo]], [Rep.from_dict(x) for x in raw[hi]], cfg.thresholds)
+        return judge([Rep.from_dict(x) for x in raw[lo]], [Rep.from_dict(x) for x in raw[hi]],
+                     cfg.thresholds, cfg.scenario.endpoints)
 
     def oracle(idxs, confirm=False):
         out = {i: "good" for i in idxs if i == 0}      # index 0 is the baseline by definition
@@ -93,7 +94,8 @@ def run_bisect(cfg, targets):
         raw = measure_many(cfg.scaled(2.0) if confirm else cfg, {i: targets[i] for i in todo})
         retry, recheck = [], []
         for i in todo:
-            d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
+            d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds,
+                      cfg.scenario.endpoints)
             evidence.append({"index": i, "confirm": confirm, **d})
             if d["verdict"] == "inconclusive" and not confirm:
                 retry.append(i)
@@ -104,7 +106,8 @@ def run_bisect(cfg, targets):
         if retry:                                      # one longer re-probe, like the gate
             raw = measure_many(cfg.scaled(2.0), {i: targets[i] for i in retry})
             for i in retry:
-                d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds)
+                d = judge(base, [Rep.from_dict(x) for x in raw[i]], cfg.thresholds,
+                          cfg.scenario.endpoints)
                 evidence.append({"index": i, "retry": True, **d})
                 if d["verdict"] == "bad":
                     recheck.append(i)

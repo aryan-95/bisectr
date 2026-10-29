@@ -87,6 +87,12 @@ def test_list_runs_rejects_nonpositive_limit():
         store.list_runs(make_config(), limit=0)
 
 
+def test_list_runs_accepts_fix_verification_records(monkeypatch, tmp_path):
+    monkeypatch.setattr(store, "RUNS", tmp_path)
+
+    assert store.list_runs(make_config(), kind="verify-fix", limit=1) == []
+
+
 def test_list_runs_queries_recent_cloud_records(monkeypatch):
     class QueryTable:
         def query(self, **kwargs):

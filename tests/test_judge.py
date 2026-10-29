@@ -1,5 +1,6 @@
 import numpy as np
 from bisectr.config import Thresholds
+from bisectr.config import Endpoint
 from bisectr.judge import Rep, judge, summarize
 
 TH = Thresholds()
@@ -52,3 +53,50 @@ def test_summary_reports_peak_memory_across_replicas():
 
     assert summary["mem_mb"] == 150.0
     assert set(summary["latency_quantiles_ms"]) == {"p50", "p90", "p95", "p99"}
+
+
+def test_endpoint_budget_detects_regression_hidden_by_other_routes():
+    rng = np.random.default_rng(42)
+
+    def endpoint_rep(scale):
+        users = rng.lognormal(np.log(5), 0.1, 2000)
+        orders = rng.lognormal(np.log(10 * scale), 0.1, 100)
+        return Rep(
+            np.concatenate([users, orders]),
+            0,
+            2100,
+            0.001,
+            100,
+            {
+                "GET /users": {"lat": users, "errors": 0, "n": 2000},
+                "GET /orders": {"lat": orders, "errors": 0, "n": 100},
+            },
+        )
+
+    baseline = [endpoint_rep(1.0) for _ in range(3)]
+    candidate = [endpoint_rep(1.8) for _ in range(3)]
+    endpoints = [
+        Endpoint(path="/users", weight=1),
+        Endpoint(path="/orders", weight=1, max_p95_ratio=1.5),
+    ]
+
+    result = judge(baseline, candidate, TH, endpoints)
+
+    assert result["verdict"] == "bad"
+    assert [endpoint["verdict"] for endpoint in result["endpoints"]] == ["good", "bad"]
+    assert result["endpoints"][1]["p95_ratio"] >= 1.5
+
+
+def test_missing_endpoint_samples_prevent_confident_pass():
+    baseline = reps(1)
+    candidate = reps(2)
+    for replica in [*baseline, *candidate]:
+        replica.endpoint_metrics = {
+            "GET /users": {"lat": replica.lat[:100], "errors": 0, "n": 100}
+        }
+    endpoints = [Endpoint(path="/orders", weight=1)]
+
+    result = judge(baseline, candidate, TH, endpoints)
+
+    assert result["verdict"] == "inconclusive"
+    assert result["endpoints"][0]["verdict"] == "insufficient_samples"

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import csv, os, subprocess, sys, time
+import csv, json, os, subprocess, sys, time
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -45,6 +45,19 @@ def _auto_baseline(cfg, branch):
             return s
     typer.echo("no commit on the main branch has an image in ECR")
     raise typer.Exit(2)
+
+
+def _bisect_result_payload(result, shas, evidence):
+    return {
+        "kind": result.kind,
+        "culprit": shas[result.culprit] if result.culprit is not None else None,
+        "window": (
+            [shas[result.window[0]], shas[result.window[1]]]
+            if result.window is not None else None
+        ),
+        "probes": result.probes,
+        "evidence": evidence,
+    }
 
 
 @app.command()
@@ -112,10 +125,75 @@ def gate(config: str = "bisectr.yaml",
     raise typer.Exit(1 if res["verdict"] == "FAIL" else 0)
 
 
+@app.command()
+def suite(config: str = "bisectr.yaml",
+          candidate: str = typer.Option(...),
+          baseline: str = "auto",
+          main_branch: str = "origin/main",
+          profiles: Optional[List[str]] = typer.Option(None, "--profile"),
+          no_cache: bool = False):
+    """Run the gate for several configured workload profiles in one command."""
+    cfg = load(config)
+    selected = cfg.scenarios or [cfg.scenario]
+    if profiles:
+        missing = sorted(set(profiles) - {scenario.profile for scenario in selected})
+        if missing:
+            raise typer.BadParameter(f"unknown scenario profile(s): {', '.join(missing)}")
+        selected = [scenario for scenario in selected if scenario.profile in profiles]
+    if baseline == "auto":
+        baseline = _auto_baseline(cfg, main_branch)
+    for ref in (candidate, baseline):
+        if ":" not in ref and not probe.image_exists(cfg, ref):
+            typer.echo(f"No image tagged {ref} in ECR.", err=True)
+            raise typer.Exit(2)
+
+    results = []
+    sections = []
+    for scenario in selected:
+        scenario_cfg = cfg.model_copy(update={"scenario": scenario})
+        try:
+            result = run_gate(
+                scenario_cfg, (_image(cfg, candidate), {}),
+                (_image(cfg, baseline), {}), use_cache=not no_cache,
+            )
+        except GuardrailBlocked as exc:
+            typer.echo(f"Bisectr suite blocked on profile '{scenario.profile}': {exc}", err=True)
+            raise typer.Exit(2)
+        results.append({"profile": scenario.profile, "result": result})
+        sections.extend([f"## Workload profile: {scenario.profile}", "",
+                         report.comment_markdown(result, scenario_cfg), ""])
+
+    overall = (
+        "FAIL" if any(item["result"]["verdict"] == "FAIL" for item in results)
+        else "WARN" if any(item["result"]["verdict"] == "WARN" for item in results)
+        else "PASS"
+    )
+    markdown = (
+        f"### Bisectr workload suite: {overall}\n\n"
+        + "\n".join(f"- **{item['profile']}**: {item['result']['verdict']}" for item in results)
+        + "\n\n"
+        + "\n".join(sections)
+    )
+    typer.echo(markdown)
+    run_id = uuid.uuid4().hex
+    data = {
+        "inputs": {
+            "candidate": candidate,
+            "baseline": baseline,
+            "profiles": [scenario.profile for scenario in selected],
+        },
+        "result": {"verdict": overall, "scenarios": results},
+    }
+    store.save_run("suite", data, cfg, run_id)
+    report_uri = store.save_report(cfg, run_id, report.html_report("Bisectr workload suite", markdown, data))
+    typer.echo(f"HTML report: {report_uri}")
+    raise typer.Exit(1 if overall == "FAIL" else 0)
+
+
 @app.command("bisect")
 def bisect_cmd(config: str = "bisectr.yaml",
                good: str = typer.Option(...), bad: str = typer.Option(...),
-               post: bool = False):
+               post: bool = False, result_json: Optional[str] = None):
     """Find the first bad commit between good and bad."""
     cfg = load(config)
     good = _resolve_commit(good, "good")
@@ -162,6 +240,10 @@ def bisect_cmd(config: str = "bisectr.yaml",
         "result": {"kind": result.kind, "culprit": result.culprit, "window": result.window,
                    "probes": result.probes, "evidence": evidence},
     }
+    if result_json:
+        with open(result_json, "w", encoding="utf-8") as output:
+            json.dump(_bisect_result_payload(result, shas, evidence), output, indent=2)
+            output.write("\n")
     store.save_run("bisect", run_data, cfg, run_id)
     report_uri = store.save_report(
         cfg, run_id, report.html_report("Bisectr bisect", md, run_data))
@@ -176,11 +258,16 @@ def bisect_cmd(config: str = "bisectr.yaml",
 @app.command("eval")
 def eval_cmd(scenarios: str = "eval/scenarios.yaml", image: str = typer.Option(...),
              trials: int = 5, bisect_trials: int = 3, out: str = "eval/results.csv",
-             config: str = "bisectr.yaml"):
+             config: str = "bisectr.yaml", seed: int = 20261029, resume: bool = False):
     """Run the evaluation harness."""
-    subprocess.run([sys.executable, "eval/run_eval.py", "--config", config, "--scenarios", scenarios,
-                    "--image", image, "--trials", str(trials), "--bisect-trials", str(bisect_trials),
-                    "--out", out], check=True)
+    command = [
+        sys.executable, "eval/run_eval.py", "--config", config, "--scenarios", scenarios,
+        "--image", image, "--trials", str(trials), "--bisect-trials", str(bisect_trials),
+        "--seed", str(seed), "--out", out,
+    ]
+    if resume:
+        command.append("--resume")
+    subprocess.run(command, check=True)
 
 
 @app.command("validate")
@@ -247,11 +334,57 @@ def validate_cmd(config: str = "bisectr.yaml",
     typer.echo(f"Validation results: {out}")
 
 
+@app.command("verify-fix")
+def verify_fix(config: str = "bisectr.yaml",
+               baseline: str = typer.Option(..., help="Known-good image tag or commit SHA"),
+               candidate: str = typer.Option(..., help="Fixed candidate image tag or commit SHA")):
+    """Verify that a fix restores performance relative to a known-good baseline."""
+    cfg = load(config)
+    for label, ref in (("baseline", baseline), ("candidate", candidate)):
+        if ":" not in ref and not probe.image_exists(cfg, ref):
+            typer.echo(f"No ECR image found for {label} tag '{ref}'.", err=True)
+            raise typer.Exit(2)
+    try:
+        result = run_gate(
+            cfg, (_image(cfg, candidate), {}), (_image(cfg, baseline), {}),
+            use_cache=False,
+        )
+    except GuardrailBlocked as exc:
+        typer.echo(f"Fix verification blocked: {exc}", err=True)
+        raise typer.Exit(2)
+
+    run_id = uuid.uuid4().hex
+    data = {
+        "inputs": {
+            "baseline": baseline,
+            "candidate": candidate,
+            "scenario": cfg.scenario.model_dump(),
+            "thresholds": cfg.thresholds.model_dump(),
+        },
+        "result": result,
+    }
+    store.save_run("verify-fix", data, cfg, run_id)
+    markdown = report.comment_markdown(result, cfg)
+    report_uri = store.save_report(
+        cfg, run_id, report.html_report("Bisectr fix verification", markdown, data)
+    )
+    if result["verdict"] == "PASS":
+        typer.echo(f"Regression resolved: {candidate} passed against known-good {baseline}.")
+    else:
+        typer.echo(
+            f"Regression not confirmed as resolved: verification returned "
+            f"{result['verdict']} ({', '.join(result['reasons']) or 'inconclusive'})."
+        )
+    typer.echo(markdown)
+    typer.echo(f"HTML report: {report_uri}")
+    raise typer.Exit(0 if result["verdict"] == "PASS" else 1)
+
+
 @app.command()
 def trends(config: str = "bisectr.yaml", kind: str = "all", limit: int = 20):
-    """Show recent gate, validation, and bisect results from run history."""
-    if kind not in {"all", "gate", "bisect", "validate"}:
-        raise typer.BadParameter("kind must be all, gate, bisect, or validate")
+    """Show recent gate, validation, bisect, and fix-verification results."""
+    if kind not in {"all", "gate", "bisect", "validate", "verify-fix"}:
+        raise typer.BadParameter("kind must be all, gate, bisect, validate, or verify-fix")
     if limit <= 0:
         raise typer.BadParameter("limit must be greater than zero")
     cfg = load(config)
@@ -267,9 +400,13 @@ def trends(config: str = "bisectr.yaml", kind: str = "all", limit: int = 20):
         result = data.get("result", {})
         scenario = inputs.get("scenario", {})
         profile = scenario.get("profile", "default")
-        if run["kind"] in {"gate", "validate"}:
+        if run["kind"] in {"gate", "validate", "verify-fix"}:
             outcome = result.get("verdict", "unknown")
             ratio = result.get("detail", {}).get("ratio")
+        elif run["kind"] == "suite":
+            outcome = result.get("verdict", "unknown")
+            profile = f"{len(result.get('scenarios', []))} profiles"
+            ratio = None
         else:
             outcome = result.get("kind", "unknown")
             ratio = None
@@ -281,3 +418,16 @@ def trends(config: str = "bisectr.yaml", kind: str = "all", limit: int = 20):
             f"{timestamp:<20} {run['kind']:<7} {profile[:13]:<13} "
             f"{outcome[:15]:<15} {ratio_text}"
         )
+
+
+@app.command()
+def dashboard(config: str = "bisectr.yaml", out: str = "runs/dashboard.html", limit: int = 100):
+    """Write a local HTML dashboard from stored run history."""
+    if limit <= 0:
+        raise typer.BadParameter("limit must be greater than zero")
+    cfg = load(config)
+    runs = store.list_runs(cfg, limit=limit)
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    with open(out, "w", encoding="utf-8") as file:
+        file.write(report.history_dashboard(runs))
+    typer.echo(f"Dashboard written to {out} ({len(runs)} runs).")

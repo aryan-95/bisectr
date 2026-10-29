@@ -22,6 +22,8 @@ class Endpoint(BaseModel):
     weight: int = Field(gt=0)
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"] = "GET"
     body: Optional[dict[str, Any]] = None
+    max_p95_ratio: Optional[float] = Field(default=None, ge=1)
+    max_error_delta: Optional[float] = Field(default=None, ge=0, le=1)
 
     @field_validator("path")
     @classmethod
@@ -108,6 +110,7 @@ class Config(BaseModel):
     health_path: str = "/health"
     task: Task = Task()
     scenario: Scenario = Scenario()
+    scenarios: list[Scenario] = Field(default_factory=list)
     thresholds: Thresholds = Thresholds()
     cost: Cost = Cost()
     pricing: Pricing = Pricing()
@@ -123,6 +126,13 @@ class Config(BaseModel):
         if not value.startswith("/"):
             raise ValueError("health_path must start with '/'")
         return value
+
+    @model_validator(mode="after")
+    def scenarios_have_unique_profiles(self):
+        names = [scenario.profile for scenario in self.scenarios]
+        if len(names) != len(set(names)):
+            raise ValueError("scenario profile names must be unique")
+        return self
 
     def scaled(self, factor: float) -> "Config":
         c = self.model_copy(deep=True)

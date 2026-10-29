@@ -95,7 +95,14 @@ locals {
         Resource = "${aws_s3_bucket.reports.arn}/reports/*"
       },
       { Effect = "Allow", Action = "budgets:ViewBudget", Resource = "*" },
-      { Effect = "Allow", Action = "ssm:GetParameter", Resource = aws_ssm_parameter.kill_switch.arn }
+      {
+        Effect = "Allow"
+        Action = ["ssm:GetParameter", "ssm:PutParameter"]
+        Resource = [
+          aws_ssm_parameter.kill_switch.arn,
+          "arn:aws:ssm:${local.reg}:${local.acct}:parameter/bisectr/main-build-range"
+        ]
+      }
     ]
   })
 }
