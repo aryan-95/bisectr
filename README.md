@@ -4,6 +4,9 @@ Bisectr is a performance and cost regression gate for containerized HTTP service
 baseline and candidate images under the same workload on AWS Fargate, reports a statistically
 supported verdict, and can bisect a commit range when a regression is found.
 
+[Read the complete project guide](docs/project-guide.pdf) for the architecture, workflows, features,
+use cases, validation evidence, and operational limits.
+
 > **Project status:** prototype / hackathon build. AWS-backed features require your own AWS account
 > and infrastructure setup. The optional alarm automation is disabled by default and is not a
 > production deployment rollback system. Evaluation results are specific to their workload,

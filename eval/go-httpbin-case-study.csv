@@ -1,0 +1,4 @@
+trial,profile,baseline,candidate,verdict,p95_ratio,p_value,replicas_worse,cost_regression,wall_seconds
+1,go-httpbin-get,go-httpbin-base-8b1bc143,go-httpbin-delay40ms-8b1bc143,FAIL,8.97317497696325,0.0,3,True,104.46
+2,go-httpbin-get,go-httpbin-base-8b1bc143,go-httpbin-delay40ms-8b1bc143,FAIL,12.994571428571428,0.0,3,True,93.72
+3,go-httpbin-get,go-httpbin-base-8b1bc143,go-httpbin-delay40ms-8b1bc143,FAIL,9.22079280409999,0.0,3,True,93.73

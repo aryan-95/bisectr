@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bisectr — Project Guide</title>
+<style>
+  @page { size: A4; margin: 16mm 17mm 17mm; }
+  body { font: 10pt/1.48 "Liberation Sans", Arial, sans-serif; color: #172033; }
+  h1, h2, h3 { color: #12355b; line-height: 1.18; page-break-after: avoid; }
+  h1 { font-size: 30pt; margin: 0 0 9mm; }
+  h2 { font-size: 19pt; margin: 0 0 5mm; border-bottom: 2px solid #21a0a0; padding-bottom: 2mm; }
+  h3 { font-size: 12pt; margin: 5mm 0 2mm; }
+  p { margin: 2mm 0 3mm; }
+  ul, ol { margin: 2mm 0 4mm; padding-left: 7mm; }
+  li { margin: 1.1mm 0; }
+  code { font: 8.5pt "Liberation Mono", monospace; color: #163d62; }
+  pre { background: #f0f4f8; border-left: 3px solid #21a0a0; padding: 3mm; white-space: pre-wrap; font: 8pt/1.35 "Liberation Mono", monospace; }
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; font-size: 8.8pt; }
+  th { background: #12355b; color: white; text-align: left; }
+  th, td { padding: 2mm; border: 0.4pt solid #c8d2df; vertical-align: top; }
+  tr:nth-child(even) td { background: #f4f7fa; }
+  .cover { height: 245mm; display: flex; flex-direction: column; justify-content: center; }
+  .eyebrow { color: #168787; text-transform: uppercase; letter-spacing: 2px; font-size: 10pt; font-weight: bold; }
+  .subtitle { color: #526179; font-size: 16pt; max-width: 150mm; }
+  .callout { background: #eaf5f5; border-left: 4px solid #168787; padding: 3mm 4mm; margin: 4mm 0; }
+  .warning { background: #fff5e7; border-left: 4px solid #d88a19; padding: 3mm 4mm; margin: 4mm 0; }
+  .muted { color: #637087; font-size: 8.5pt; }
+  .page { page-break-before: always; }
+  .no-break { page-break-inside: avoid; }
+  .arch td { text-align: center; font-weight: bold; color: #12355b; }
+  .arrow { color: #168787; font-size: 14pt; }
+  .small { font-size: 8.4pt; }
+  .footer-note { margin-top: 8mm; color: #64748b; font-size: 8pt; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="eyebrow">Project guide · Architecture · Features · Operations</div>
+  <h1>Bisectr</h1>
+  <p class="subtitle">Measure performance regressions before they merge. Find the likely culprit when they slip through.</p>
+  <div class="callout">
+    <strong>In one sentence:</strong> Bisectr compares container images under the same repeatable HTTP workload on AWS Fargate, evaluates latency, errors, and estimated resource cost, and reports a gate verdict with evidence.
+  </div>
+  <p>Technical overview, user workflows, architecture, setup, safety model, validation evidence, and product direction.</p>
+  <p class="muted">Repository: aryan-95/bisectr · Guide prepared 30 October 2026 · Project status: prototype / hackathon build</p>
+  <p class="footer-note">This guide describes the checked-in implementation and observed artifacts. Optional or unconfigured infrastructure is identified as such.</p>
+</section>
+
+<section class="page">
+  <h2>1. Executive overview</h2>
+  <p>Software changes can make a service slower, less reliable, or more expensive while still passing functional tests. Bisectr adds a performance check to the development workflow: it runs a baseline image and a candidate image side by side, sends both the same configured workload, measures their behavior, and produces a PASS, WARN, or FAIL verdict.</p>
+  <p>If a regression is discovered after several commits, Bisectr can test intermediate images to narrow down the first bad revision. A separate fix-verification command can check whether a proposed fix restores performance relative to a known-good image.</p>
+  <table>
+    <tr><th>For</th><td>Teams maintaining containerized HTTP services that want a repeatable, automated performance regression signal during code review.</td></tr>
+    <tr><th>Core value</th><td>Relative A/B evidence tied to immutable image/commit references, rather than a subjective “it feels slower” report.</td></tr>
+    <tr><th>Execution</th><td>Python CLI and GitHub/GitLab automation orchestrate short-lived AWS ECS Fargate probe tasks.</td></tr>
+    <tr><th>Current status</th><td>Working prototype with tests and AWS-backed capabilities; requires the user’s AWS/GitHub configuration and service-specific validation.</td></tr>
+  </table>
+  <div class="warning"><strong>Scope:</strong> Bisectr is a measurement and investigation tool, not a deployment platform. The current alarm automation is opt-in, not applied/live by default, and tracks successful main image builds—not confirmed production deployments.</div>
+  <h3>Problems it addresses</h3>
+  <ul>
+    <li>Slowdowns that functional tests do not catch.</li>
+    <li>Performance regressions hidden by aggregate metrics or inconsistent test runs.</li>
+    <li>Time-consuming manual searches through a commit history after a regression appears.</li>
+    <li>Unclear operational impact: route-level latency/error evidence and an approximate cost model put changes into context.</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>2. Architecture at a glance</h2>
+  <p>The trusted Bisectr CLI coordinates the comparison. The application and load runner execute together in a short-lived Fargate task; the runner sends requests to the app over localhost and publishes a structured result to CloudWatch Logs.</p>
+  <table class="arch">
+    <tr><td>Developer opens PR</td><td class="arrow">→</td><td>GitHub Actions builds candidate image</td><td class="arrow">→</td><td>Trusted Bisectr CLI selects baseline + candidate</td></tr>
+    <tr><td colspan="5" class="arrow">↓</td></tr>
+    <tr><td>ECR stores images</td><td class="arrow">←</td><td>ECS starts matching Fargate probe tasks</td><td class="arrow">→</td><td>Baseline and candidate run concurrently</td></tr>
+    <tr><td colspan="5" class="arrow">↓</td></tr>
+    <tr><td>CloudWatch Logs returns runner measurements</td><td class="arrow">→</td><td>Statistical judge compares results</td><td class="arrow">→</td><td>PR check/comment + HTML report + history</td></tr>
+  </table>
+  <h3>Key components</h3>
+  <table>
+    <tr><th>Component</th><th>Responsibility</th></tr>
+    <tr><td>Bisectr CLI / Python engine</td><td>Configuration, image checks, probe orchestration, judgement, bisect, report generation, history, and cost estimation.</td></tr>
+    <tr><td>Demo app / customer image</td><td>The HTTP service under test. The demo app has injectable latency, CPU, payload-size, and error-rate regressions.</td></tr>
+    <tr><td>Runner container</td><td>Open-loop load generation, warm-up, route-level measurements, and structured result logging.</td></tr>
+    <tr><td>AWS ECR + ECS/Fargate</td><td>Image storage and isolated, temporary probe-task execution.</td></tr>
+    <tr><td>CloudWatch Logs</td><td>Transport for probe results back to the CLI; the CLI waits for tasks and reads their runner stream.</td></tr>
+    <tr><td>GitHub Actions / GitLab CI</td><td>Build images, invoke trusted Bisectr code, and report a CI verdict. GitHub CI uses OIDC for AWS access.</td></tr>
+    <tr><td>DynamoDB + S3 (optional configured storage)</td><td>TTL-bound baseline cache/run records and private HTML report objects. Local mode writes under project-local cache and runs directories.</td></tr>
+    <tr><td>SSM, Budgets, reaper</td><td>Kill switch, budget controls/alerts, and cleanup safeguards for old Fargate tasks and task-definition revisions.</td></tr>
+  </table>
+  <h3>Probe task security boundary</h3>
+  <p>The probe task contains the app and runner containers in the same Fargate task. They communicate on localhost. Terraform configures no inbound security-group access and permits outbound HTTPS for image pulls/log shipping. The task has an execution role for infrastructure operations but deliberately has no application task role. The PR candidate image is built in a job without AWS credentials; a separate trusted job handles AWS operations.</p>
+  <p class="muted">This is defense in depth, not a claim that arbitrary application code is safe. Use disposable environments/data and review IAM, network, and CI settings before production use.</p>
+</section>
+
+<section class="page">
+  <h2>3. What Bisectr measures and decides</h2>
+  <h3>Paired performance gate</h3>
+  <ol>
+    <li>Check that baseline and candidate images exist in ECR.</li>
+    <li>Start the same configured workload against both images at approximately the same time.</li>
+    <li>Collect latency samples, request/error counts, CPU-seconds per request, memory, and endpoint-level statistics.</li>
+    <li>Evaluate statistical significance, practical effect size, replica agreement, error change, and configured budgets.</li>
+    <li>Return PASS, WARN (insufficient/inconclusive evidence), or FAIL. When evidence is inconclusive, the gate can repeat with a longer run.</li>
+  </ol>
+  <p>The default latency rule combines a one-sided Mann–Whitney comparison, a minimum p95 ratio, a minimum absolute p95 difference, and agreement across replicas. Error-rate increases have a separate threshold. Exact thresholds are configurable; review the actual <code>bisectr.yaml</code> used for every reported result.</p>
+  <h3>Route budgets and multiple workloads</h3>
+  <p>Workloads are configured as weighted HTTP endpoints with methods, paths, optional JSON bodies, request rate, duration, and warm-up. Multiple named profiles can represent normal and peak traffic; <code>bisectr suite</code> runs the configured profiles and fails the suite if any profile fails. Per-endpoint <code>max_p95_ratio</code> and <code>max_error_delta</code> budgets expose route regressions that aggregate measurements could hide. Under-sampled endpoints are reported as insufficient evidence—not silently treated as good.</p>
+  <h3>Cost estimate</h3>
+  <p>Bisectr uses measured CPU-seconds per request and target RPS/utilization to estimate task counts and a monthly Fargate cost delta when regional vCPU and memory prices are configured. This is a sizing estimate, not the AWS invoice; it omits other billable resources and depends on representative workload and pricing assumptions.</p>
+  <h3>Commit bisect and fix verification</h3>
+  <p>Bisect searches between known-good and known-bad image revisions, probes selected intermediate commits, handles missing images as skips, and verifies the suspected culprit against its parent. It can return a found culprit, ambiguous window, flaky result, or not-reproducible result. A cautious ambiguous result is preferable to a false certainty. <code>verify-fix</code> compares a proposed fixed image with a known-good baseline and reports resolution only when the measurement passes.</p>
+</section>
+
+<section class="page">
+  <h2>4. Features and available workflows</h2>
+  <table>
+    <tr><th>Feature</th><th>How to use it</th><th>Outcome</th></tr>
+    <tr><td>Single gate</td><td><code>bisectr gate --candidate SHA --baseline SHA</code></td><td>Side-by-side measurement, verdict, report, optional PR comment/check.</td></tr>
+    <tr><td>Workload suite</td><td><code>bisectr suite --candidate SHA --baseline SHA</code></td><td>Runs multiple configured workload profiles; any failing profile fails the suite.</td></tr>
+    <tr><td>Commit bisect</td><td><code>bisectr bisect --good SHA --bad SHA</code></td><td>Narrows the first bad commit; optional issue reporting.</td></tr>
+    <tr><td>Fix verification</td><td><code>bisectr verify-fix --baseline GOOD --candidate FIX</code></td><td>Checks whether the candidate restores performance against the known-good image.</td></tr>
+    <tr><td>Repeatable validation</td><td><code>bisectr validate --baseline IMAGE --candidate IMAGE --trials N</code></td><td>Runs uncached repeat trials and writes CSV evidence.</td></tr>
+    <tr><td>Evaluation harness</td><td><code>bisectr eval --image SHA --trials N</code></td><td>Runs controlled injected regressions and bisect trials; consumes AWS capacity and time.</td></tr>
+    <tr><td>Noise simulation</td><td><code>python eval/noise_sensitivity.py</code></td><td>Offline model of bisect outcomes as verdict flips increase; simulation, not AWS evidence.</td></tr>
+    <tr><td>History and dashboard</td><td><code>bisectr trends</code>, <code>bisectr dashboard</code></td><td>Summaries and local HTML visualization of recorded run history; does not launch probes.</td></tr>
+    <tr><td>CI checks</td><td>GitHub Actions or protected-branch GitLab CI</td><td>Automates image build, measurement, and reporting in a developer workflow.</td></tr>
+    <tr><td>Alarm-triggered investigation (optional)</td><td>Terraform opt-in plus a matching CloudWatch alarm</td><td>Bisects the latest two successful main image builds and may open a verified, unmerged revert PR.</td></tr>
+  </table>
+  <h3>GitHub PR flow</h3>
+  <p>The candidate image is built without AWS credentials and uploaded as an artifact. A trusted-base job downloads it, assumes the configured AWS role through OIDC, publishes the image, executes the gate, and posts the result. The workflow restricts cloud-backed PR runs to eligible same-repository contributors; it intentionally does not run the privileged gate on fork PRs. Require the named check through repository branch rules only after the check has successfully reported.</p>
+  <h3>GitLab flow</h3>
+  <p>The documented GitLab pipeline runs ordinary tests and limits AWS-backed gate execution to a protected default-branch context using a project/ref-scoped AWS trust relationship. The current described setup is not a general merge-request gate; confirm its pipeline behavior and runner prerequisites before presenting it as merge blocking.</p>
+</section>
+
+<section class="page">
+  <h2>5. Alarm workflow and operational safety</h2>
+  <p>The optional alarm path is designed as a reviewable recovery aid, not autonomous production rollback:</p>
+  <ol>
+    <li>A successful main image build publishes the app and runner images, then records the previous and current successful main build SHAs in SSM Parameter Store.</li>
+    <li>EventBridge matches CloudWatch alarm transitions into ALARM with a configured name prefix.</li>
+    <li>A Lambda validates that SHA range, deduplicates event retries with DynamoDB, retrieves a scoped GitHub token from Secrets Manager, and dispatches the alarm workflow.</li>
+    <li>The workflow bisects the range. If a culprit is verified, it creates a separate revert branch, builds the reverted demo-app image, and runs fix verification.</li>
+    <li>It opens a revert PR only after verification passes. If the culprit or fix is not verified, it opens an investigation issue instead. It never auto-merges.</li>
+  </ol>
+  <div class="warning"><strong>Critical limitation:</strong> this project does not deploy the demo application. The SHAs represent successful main image builds, not the version running in production. A production alarm may refer to another version. Do not call this production rollback or claim that a passing synthetic check proves production recovery.</div>
+  <h3>Operational controls</h3>
+  <ul>
+    <li>SSM kill switch at <code>/bisectr/enabled</code> can block new probe runs.</li>
+    <li>Maximum probe/task concurrency and probe timeouts limit resource use; Ctrl+C/error cleanup stops active tasks.</li>
+    <li>A reaper stops stale tasks and deregisters old task-definition revisions.</li>
+    <li>AWS Budgets and SNS notifications provide spend visibility; configuration may block new runs at the configured budget threshold.</li>
+    <li>Cloud resources have ongoing costs. Check the target AWS account, region, budget, active tasks, and image tags before starting evaluation.</li>
+  </ul>
+  <h3>Enabling alarm automation requires</h3>
+  <p>Set <code>enable_alarm_bisect=true</code>; provide the repository, alarm prefix, and Secrets Manager ARN for a fine-grained GitHub token; allow Actions to create PRs; apply Terraform; publish at least two successful main image builds; and test a controlled alarm in non-production. The feature is disabled by default and was not enabled/applied as of this guide.</p>
+</section>
+
+<section class="page">
+  <h2>6. Setup and practical command guide</h2>
+  <h3>Local development</h3>
+  <pre>python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+python -m pytest -q
+bisectr --help</pre>
+  <p>Python 3.12 or newer is required. The development extras include pytest and Hypothesis. Local tests do not require Fargate and are the first validation step.</p>
+  <h3>AWS-backed setup (operator work)</h3>
+  <p>Provision the development stack using Terraform 1.10+ and AWS credentials with the required permissions. Before Terraform initialization, create a separate state bucket with encryption, versioning, and public access blocked. Apply Terraform, configure GitHub OIDC/Actions permissions and repository secrets, generate/review <code>bisectr.yaml</code>, set pricing and safe test workloads, and push the runner/app images. Never overwrite an existing customized config without a backup.</p>
+  <pre>aws sts get-caller-identity
+terraform -chdir=infra/envs/dev output
+python scripts/gen_config.py
+./scripts/push_images.sh</pre>
+  <p>Confirm the AWS account/region, ECR image tags, kill switch, Fargate capacity/budget, security group, subnets, log group, and runner image before running probes. Image tags must be present in ECR; placeholder strings are not valid tags.</p>
+  <h3>Short demonstration</h3>
+  <pre>make gate-ok       # A/A control: same image on both sides; expect PASS
+make gate-bad      # injected slow_dependency regression; expect FAIL
+bisectr trends --kind gate
+bisectr dashboard --out runs/dashboard.html</pre>
+  <p>The gate commands launch Fargate tasks and may incur AWS charges. A failing exit code for <code>make gate-bad</code> is expected because the demonstration deliberately introduces a regression. The trends/dashboard commands only read saved history.</p>
+  <h3>Repeat trials and evaluation</h3>
+  <pre>bisectr validate --config bisectr.yaml \
+  --baseline BASELINE_IMAGE_TAG --candidate CANDIDATE_IMAGE_TAG \
+  --trials 5 --out eval/service-validation.csv
+
+bisectr eval --config bisectr.yaml \
+  --image "$(git rev-parse HEAD)" --trials 20 --bisect-trials 3 \
+  --seed 20261029 --out eval/judge-results.csv
+python eval/report.py eval/judge-results.csv</pre>
+  <p>Use your actual immutable image tags. Evaluation can take a long time and launch many tasks; do not run it alongside another Fargate test. Resume an interrupted run only when reusing the exact image, configuration, scenario file, seed, trial counts, and output CSV.</p>
+</section>
+
+<section class="page">
+  <h2>7. Use cases and product fit</h2>
+  <table>
+    <tr><th>Use case</th><th>Example</th><th>What Bisectr contributes</th></tr>
+    <tr><td>PR performance review</td><td>New endpoint implementation or dependency update</td><td>Automated baseline/candidate comparison, visible check and measurement summary before merge.</td></tr>
+    <tr><td>Endpoint SLO/budget monitoring during development</td><td>Checkout p95 is more important than a low-traffic admin route</td><td>Weighted traffic mix and per-route p95/error budgets.</td></tr>
+    <tr><td>Regression investigation</td><td>Latency increase observed after several main builds</td><td>Image/commit bisect, verification, and evidence-rich issue/report.</td></tr>
+    <tr><td>Cost-impact screening</td><td>CPU work increases per request at a target throughput</td><td>Estimated task capacity and monthly cost delta under explicit pricing assumptions.</td></tr>
+    <tr><td>Release validation</td><td>Compare two immutable images using staging-safe data</td><td>Repeatable uncached A/B trials and CSV results.</td></tr>
+  </table>
+  <h3>Potential users and adoption</h3>
+  <p>Likely early users are platform engineering, SRE, backend teams, and maintainers of containerized APIs on AWS who can provide a safe representative workload and reproducible images. A sensible adoption path is: start with a local A/A control, run against a staging service, establish false-positive behavior, add a non-blocking PR check, then require the check only after trust and operational readiness are demonstrated.</p>
+  <p>For a startup/product direction, position Bisectr as a developer-facing performance regression gate rather than a generic monitoring replacement. A production offering would still need tenant isolation, customer-owned cloud roles, secret management, pricing/cost controls, durable audit trails, broader runtime support, deployment-aware release metadata, and a clear support/SLO model. These are product requirements—not claims that the prototype already provides them.</p>
+  <h3>What it is not</h3>
+  <ul>
+    <li>Not an APM, continuous production monitoring platform, or autoscaler.</li>
+    <li>Not a production traffic replay system or a substitute for privacy/data safety review.</li>
+    <li>Not an automated deployment or direct rollback mechanism.</li>
+    <li>Not proof that an arbitrary service will have the same results as the demo app.</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>8. Validation evidence and interpretation</h2>
+  <p>Results depend on the exact image, scenario, region, task size, price inputs, sample count, and time. The table below describes the artifacts checked for this guide; it is not a universal accuracy claim.</p>
+  <table>
+    <tr><th>Evidence</th><th>Observed result</th><th>How to interpret it</th></tr>
+    <tr><td>Automated unit tests</td><td>80 tests passed in the last recorded validation run.</td><td>Good evidence for implementation logic, not proof of AWS deployment correctness.</td></tr>
+    <tr><td>Current AWS evaluation CSV</td><td>40 gate trials across n_plus_one and slow_dependency (20 each); four bisect trials recorded (three n_plus_one, one slow_dependency).</td><td>Partial capture. It does not contain all requested scenarios or noise-only controls. Do not publish as a completed 20-trial evaluation.</td></tr>
+    <tr><td>Current partial evaluation summary</td><td>40/40 regression gates detected; false-positive rate is unavailable; four of four recorded bisect trials found a culprit; no wrong culprit in those four.</td><td>Promising but small/partial sample. A missing control means there is no measured false-positive estimate here. Four bisects are too few to establish robust accuracy.</td></tr>
+    <tr><td>Controlled go-httpbin comparison</td><td>Three trials of an intentionally delayed image vs. a baseline: all three FAIL; p95 ratios approximately 8.97×, 12.99×, and 9.22×.</td><td>Controlled injected-delay demonstration on a public open-source service image, not evidence that Bisectr found a naturally occurring regression or validates production traffic.</td></tr>
+    <tr><td>Noise sensitivity</td><td>Offline simulation models bisect outcomes under configured verdict-flip rates.</td><td>Simulation only. It is not AWS data or a substitute for repeated control and regression trials.</td></tr>
+  </table>
+  <h3>Limitations that affect conclusions</h3>
+  <ul>
+    <li>Workloads must represent the target service; a mismatch can create false confidence or noise.</li>
+    <li>Probe runner shares Fargate task CPU with the app, so results are relative measurements rather than production latency.</li>
+    <li>Bisect works best for reproducible, roughly monotonic regressions. Reverts, intermittent behavior, or noisy verdicts can yield ambiguous/flaky results.</li>
+    <li>Small trial counts do not establish reliable false-positive/wrong-culprit rates. Report sample sizes and uncertainty.</li>
+    <li>Cost model is a capacity estimate using user-configured prices, not an AWS bill.</li>
+    <li>Write endpoints require disposable test data. Current probe configuration does not inject credentials or anonymize production data.</li>
+    <li>The existing alarm SHA tracking is build-aware, not deployment-aware.</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>9. Repository map and next improvements</h2>
+  <table>
+    <tr><th>Path</th><th>Contents</th></tr>
+    <tr><td><code>src/bisectr/</code></td><td>CLI, config, probe orchestration, gate judgement, bisect, reporting, storage, guardrails, and cost model.</td></tr>
+    <tr><td><code>runner/</code></td><td>Containerized load generator and measurement emitter.</td></tr>
+    <tr><td><code>demo-app/</code></td><td>HTTP demo service and controllable regression modes.</td></tr>
+    <tr><td><code>infra/envs/dev/</code></td><td>Terraform for ECR, ECS/Fargate, IAM/OIDC, logs, storage, budget, cleanup, and optional alarm dispatch.</td></tr>
+    <tr><td><code>.github/workflows/</code>, <code>.gitlab-ci.yml</code></td><td>Build, gate, bisect, and CI integration workflows.</td></tr>
+    <tr><td><code>lambdas/</code></td><td>Task reaper and optional CloudWatch-alarm dispatch handler.</td></tr>
+    <tr><td><code>eval/</code>, <code>tests/</code></td><td>Scenario evaluation, reports, noise simulations, and automated tests.</td></tr>
+    <tr><td><code>docs/</code></td><td>Demo, validation, alarm-automation, runbook, and project guide documentation.</td></tr>
+  </table>
+  <h3>Highest-value next steps</h3>
+  <ol>
+    <li>Finish a complete, reproducible evaluation with all scenarios, sufficient repeated bisects, and a noise-only A/A control; publish the exact CSV, config, image SHA, region, and pricing assumptions.</li>
+    <li>Run more repeated control and known-regression trials to estimate false-positive and detection rates with meaningful uncertainty.</li>
+    <li>Validate a second service using safe read-only routes and realistic staging workload; document methodology and limitations.</li>
+    <li>Establish a working, repeatable GitHub PR demo, confirm a successful baseline image and CI secret/OIDC configuration, and test a required check in a dedicated repository/ruleset.</li>
+    <li>For production relevance, integrate actual deployment SHAs only after healthy deployment, map alarms to services/releases, and verify recovery with post-deploy health checks. Keep human approval for reverts.</li>
+    <li>For a SaaS path, design customer isolation, cloud access onboarding, tenancy, auditability, data retention, and transparent billing before accepting customer workloads.</li>
+  </ol>
+  <div class="callout"><strong>Takeaway:</strong> Bisectr is a measurable performance quality gate with an investigation workflow. Its strongest demonstration is a controlled A/A pass followed by a known injected regression fail, with the measurements and safety boundaries shown openly.</div>
+  <p class="footer-note">Supporting material: README, docs/demo.md, docs/validation.md, docs/alarm-automation.md, docs/runbook.md, eval/results-20-trials.csv, eval/go-httpbin-case-study.csv. Numbers and activation status should be refreshed before external publication.</p>
+</section>
+
+</body>
+</html>
