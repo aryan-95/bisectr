@@ -25,24 +25,27 @@ cost:
   target_utilization: 0.6
   on_cost_regression: warn
 pricing:
-  vcpu_hour: 0.04256
-  gb_hour: 0.004655
+  vcpu_hour: 0.04048
+  gb_hour: 0.004445
 replicas: 3
 max_probes: 24
 bisect_k: 3
 infra:
-  region: ap-south-1
+  region: us-east-1
   cluster: bisectr
   log_group: /bisectr/probe
-  exec_role: arn:aws:iam::196253396964:role/bisectr-exec
-  sg: sg-056b5fa743c6b8971
+  exec_role: arn:aws:iam::196253396964:role/bisectr-exec-useast1
+  sg: sg-0085f866244b3f05b
   subnets:
-  - subnet-0c56c4247007d3381
-  - subnet-0c4f79a0cae04a5cb
-  - subnet-02c5ba2c8dba5cc35
-  image_repo: 196253396964.dkr.ecr.ap-south-1.amazonaws.com/bisectr-demo
-  runner_image: 196253396964.dkr.ecr.ap-south-1.amazonaws.com/bisectr-runner:latest
+  - subnet-04a9d89e268a361f4
+  - subnet-07ebb489847898660
+  - subnet-08ab368eb4f1e6bc4
+  - subnet-0f078f42dd090da12
+  - subnet-09a68cf3660b777c8
+  - subnet-09342200af8c00864
+  image_repo: 196253396964.dkr.ecr.us-east-1.amazonaws.com/bisectr-demo
+  runner_image: 196253396964.dkr.ecr.us-east-1.amazonaws.com/bisectr-runner:latest
   runs_table: bisectr-runs
   baseline_table: bisectr-baselines
-  reports_bucket: bisectr-reports-196253396964-ap-south-1
-  budget_name: bisectr-monthly
+  reports_bucket: bisectr-reports-196253396964-us-east-1
+  budget_name: bisectr-monthly-useast1

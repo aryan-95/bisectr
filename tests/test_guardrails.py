@@ -9,7 +9,7 @@ from bisectr.config import Config, Infra
 def make_config(budget_name="bisectr-monthly"):
     return Config(
         infra=Infra(
-            region="ap-south-1", cluster="cluster", log_group="logs", exec_role="role",
+            region="us-east-1", cluster="cluster", log_group="logs", exec_role="role",
             sg="sg", subnets=["subnet"], image_repo="repo/image", runner_image="repo/runner",
             budget_name=budget_name,
         )

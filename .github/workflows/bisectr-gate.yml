@@ -88,7 +88,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.BISECTR_ROLE_ARN }}
-          aws-region: ap-south-1
+          aws-region: us-east-1
 
       - name: Push candidate image to ECR
         env:
@@ -96,7 +96,7 @@ jobs:
         run: |
           IMAGE_REPO="$(python -c 'import yaml; print(yaml.safe_load(open("bisectr.yaml"))["infra"]["image_repo"])')"
           REGISTRY="${IMAGE_REPO%%/*}"
-          aws ecr get-login-password --region ap-south-1 \
+          aws ecr get-login-password --region us-east-1 \
             | docker login --username AWS --password-stdin "$REGISTRY"
           docker tag "bisectr-candidate:${CANDIDATE_SHA}" "${IMAGE_REPO}:${CANDIDATE_SHA}"
           docker push "${IMAGE_REPO}:${CANDIDATE_SHA}"

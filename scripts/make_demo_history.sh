@@ -6,7 +6,7 @@ N=${1:-10}; CULPRIT=${2:-6}
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 DEST=${DEST:-$SRC/../bisectr-demo-history}
 LOG=${LOG:-$SRC/../bisectr-shas.txt}
-REGION=${REGION:-ap-south-1}
+REGION=${REGION:-us-east-1}
 if [ -e "$DEST" ] || [ -e "$LOG" ]; then
   echo "Refusing to overwrite existing demo output." >&2
   echo "Choose fresh paths with DEST=/path/to/history LOG=/path/to/shas.txt." >&2

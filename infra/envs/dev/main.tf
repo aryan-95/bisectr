@@ -6,8 +6,12 @@ terraform {
   backend "s3" {}
 }
 
-variable "region" { default = "ap-south-1" }
+variable "region" { default = "us-east-1" }
 provider "aws" { region = var.region }
+
+locals {
+  region_suffix = replace(var.region, "-", "")
+}
 
 data "aws_vpc" "default" { default = true }
 data "aws_subnets" "default" {
@@ -71,7 +75,7 @@ resource "aws_security_group" "probe" {
 
 # execution role only (pull image, write logs). Probe tasks get NO task role.
 resource "aws_iam_role" "exec" {
-  name = "bisectr-exec"
+  name = "bisectr-exec-${local.region_suffix}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

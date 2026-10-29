@@ -56,7 +56,7 @@ resource "aws_dynamodb_table" "alarm_dispatches" {
 
 resource "aws_iam_role" "alarm_dispatch" {
   count = var.enable_alarm_bisect ? 1 : 0
-  name  = "bisectr-alarm-dispatch"
+  name  = "bisectr-alarm-dispatch-${local.region_suffix}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -82,7 +82,7 @@ resource "aws_cloudwatch_log_group" "alarm_dispatch" {
 
 resource "aws_iam_role_policy" "alarm_dispatch" {
   count = var.enable_alarm_bisect ? 1 : 0
-  name  = "bisectr-alarm-dispatch"
+  name  = "bisectr-alarm-dispatch-${local.region_suffix}"
   role  = aws_iam_role.alarm_dispatch[0].id
 
   policy = jsonencode({

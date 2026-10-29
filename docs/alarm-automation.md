@@ -40,6 +40,7 @@ service.
 
    ```bash
    terraform -chdir=infra/envs/dev apply \
+     -var="region=us-east-1" \
      -var="github_repo=OWNER/REPO" \
      -var="enable_alarm_bisect=true" \
      -var="alarm_name_prefix=bisectr-" \

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REGION=${REGION:-ap-south-1}
+REGION=${REGION:-us-east-1}
 ACCT=$(aws sts get-caller-identity --query Account --output text)
 REG=$ACCT.dkr.ecr.$REGION.amazonaws.com
 SHA=$(git rev-parse HEAD)

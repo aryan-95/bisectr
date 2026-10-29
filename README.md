@@ -66,17 +66,20 @@ bisectr --help
 
 To run Fargate probes, first configure AWS credentials, create the Terraform state bucket, and
 configure the required Terraform variables for your AWS account and GitHub/GitLab setup. Then
-provision the development infrastructure:
+provision the development infrastructure in `us-east-1`. The Terraform state bucket can remain in
+its existing region; the S3 backend region below is the bucket's region, not the AWS provider region.
+Use a new state key for the new regional stack so the active `ap-south-1` stack is preserved:
 
 ```bash
 cd infra/envs/dev
-terraform init -migrate-state \
+terraform init -reconfigure \
   -backend-config="bucket=YOUR_TERRAFORM_STATE_BUCKET" \
-  -backend-config="key=bisectr/dev/terraform.tfstate" \
+  -backend-config="key=bisectr/dev/us-east-1/terraform.tfstate" \
   -backend-config="region=ap-south-1" \
   -backend-config="encrypt=true" \
   -backend-config="use_lockfile=true"
 terraform apply \
+  -var="region=us-east-1" \
   -var="github_repo=YOUR_OWNER/YOUR_REPO" \
   -var="gitlab_project_path=YOUR_GROUP/YOUR_PROJECT" \
   -var="gitlab_ref=main"
@@ -88,9 +91,12 @@ make gate-bad                           # injected regression: expect FAIL
 ```
 
 `scripts/gen_config.py` reads Terraform outputs into `bisectr.yaml`. Back up custom settings before
-regenerating the file. Configure `pricing.vcpu_hour` and `pricing.gb_hour` from the AWS Fargate price
-list for the selected region if you want cost estimates. See [docs/validation.md](docs/validation.md)
-before running AWS-backed evaluation or service validation.
+regenerating the file; it must be regenerated after the `us-east-1` stack is applied because subnet,
+security-group, ECR, and storage resources are region-specific. The existing `ap-south-1` stack and
+its state are intentionally left in place until the new stack is verified. Configure
+`pricing.vcpu_hour` and `pricing.gb_hour` from the AWS Fargate price list for `us-east-1` if you want
+cost estimates. See [docs/validation.md](docs/validation.md) before running AWS-backed evaluation or
+service validation.
 
 ### Try commit bisect
 
@@ -138,6 +144,8 @@ The Terraform state bucket is separate from the report bucket and must be create
 init`. Enable bucket versioning, encryption, and S3 Block Public Access. The backend uses S3 native
 locking; see the migration notes in the [runbook](docs/runbook.md). Terraform
 also adds a DynamoDB index used by `bisectr trends`; apply the state changes before using cloud trends.
+The application resources default to `us-east-1`. Terraform's S3 backend `region` setting still needs
+to match wherever your separately managed state bucket lives.
 
 ## Evaluation
 
@@ -212,7 +220,9 @@ minutes, deregisters old task definition revisions), AWS Budgets alert, same-rep
 
 ## GitHub Actions
 
-Set the repository secret `BISECTR_ROLE_ARN` to the ARN of the CI role created by Terraform. On pushes
+Set the repository secret `BISECTR_ROLE_ARN` to the ARN of the CI role created by Terraform. The
+current workflow region is `us-east-1`; apply Terraform there and regenerate `bisectr.yaml` before
+running the workflows. On pushes
 to `main`, `build-main` runs the test suite and publishes the runner and commit-tagged demo image to
 ECR. `bisectr-gate` builds a PR candidate image without AWS credentials, then runs the gate from the
 trusted base revision and posts the result. Because the gate uses AWS resources, it is limited to

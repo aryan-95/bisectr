@@ -5,7 +5,7 @@ data "archive_file" "reaper" {
 }
 
 resource "aws_iam_role" "reaper" {
-  name = "bisectr-reaper"
+  name = "bisectr-reaper-${local.region_suffix}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -22,7 +22,7 @@ resource "aws_iam_role_policy_attachment" "reaper_logs" {
 }
 
 resource "aws_iam_role_policy" "reaper" {
-  name = "bisectr-reaper"
+  name = "bisectr-reaper-${local.region_suffix}"
   role = aws_iam_role.reaper.id
   policy = jsonencode({
     Version = "2012-10-17"

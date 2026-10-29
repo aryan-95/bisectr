@@ -30,7 +30,7 @@ class FakeSSM:
 
 def _configure(monkeypatch, ssm, sha):
     monkeypatch.setenv("GITHUB_SHA", sha)
-    monkeypatch.setenv("AWS_DEFAULT_REGION", "ap-south-1")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setattr(update_main_build_range.boto3, "client", lambda *_a, **_kw: ssm)
     monkeypatch.setattr(update_main_build_range.subprocess, "run", lambda *_a, **_kw: None)
     monkeypatch.setattr(

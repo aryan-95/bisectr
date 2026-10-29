@@ -43,7 +43,7 @@
     <strong>In one sentence:</strong> Bisectr compares container images under the same repeatable HTTP workload on AWS Fargate, evaluates latency, errors, and estimated resource cost, and reports a gate verdict with evidence.
   </div>
   <p>Technical overview, user workflows, architecture, setup, safety model, validation evidence, and product direction.</p>
-  <p class="muted">Repository: aryan-95/bisectr · Guide prepared 30 October 2026 · Project status: prototype / hackathon build</p>
+  <p class="muted">Repository: aryan-95/bisectr · Default AWS workload region: us-east-1 · Guide prepared 30 October 2026 · Project status: prototype / hackathon build</p>
   <p class="footer-note">This guide describes the checked-in implementation and observed artifacts. Optional or unconfigured infrastructure is identified as such.</p>
 </section>
 
@@ -136,6 +136,7 @@
 
 <section class="page">
   <h2>5. Alarm workflow and operational safety</h2>
+  <p>The current deployment target is <code>us-east-1</code>. A separate Terraform state key is used for this regional stack while the existing <code>ap-south-1</code> stack remains intact pending verification. The Terraform S3 backend may remain in the state bucket's existing region; backend and provider regions are independent.</p>
   <p>The optional alarm path is designed as a reviewable recovery aid, not autonomous production rollback:</p>
   <ol>
     <li>A successful main image build publishes the app and runner images, then records the previous and current successful main build SHAs in SSM Parameter Store.</li>

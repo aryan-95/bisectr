@@ -9,7 +9,7 @@ variable "monthly_budget_usd" {
 }
 
 resource "aws_budgets_budget" "monthly" {
-  name         = "bisectr-monthly"
+  name         = "bisectr-monthly-${local.region_suffix}"
   budget_type  = "COST"
   limit_amount = var.monthly_budget_usd
   limit_unit   = "USD"

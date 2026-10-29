@@ -52,7 +52,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.BISECTR_ROLE_ARN }}
-          aws-region: ap-south-1
+          aws-region: us-east-1
 
       - name: Bisect the alarm-associated main image range
         id: bisect
@@ -121,7 +121,7 @@ jobs:
           IMAGE_REPO="$(python -c 'import yaml; print(yaml.safe_load(open("bisectr.yaml"))["infra"]["image_repo"])')"
           REGISTRY="${IMAGE_REPO%%/*}"
           FIXED_SHA="$(git rev-parse HEAD)"
-          aws ecr get-login-password --region ap-south-1 \
+          aws ecr get-login-password --region us-east-1 \
             | docker login --username AWS --password-stdin "$REGISTRY"
           docker build --platform linux/amd64 \
             --tag "${IMAGE_REPO}:${FIXED_SHA}" demo-app

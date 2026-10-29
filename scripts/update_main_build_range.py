@@ -26,7 +26,7 @@ def main():
             f"Skipping stale main build {current_sha}; current main is {latest_main_sha}."
         )
         return
-    region = os.environ.get("AWS_DEFAULT_REGION", "ap-south-1")
+    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
     ssm = boto3.client("ssm", region_name=region)
     previous_sha = None
     try:

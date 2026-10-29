@@ -109,7 +109,7 @@ locals {
 
 resource "aws_iam_role" "ci" {
   count = var.github_repo != "" ? 1 : 0
-  name  = "bisectr-ci"
+  name  = "bisectr-ci-${local.region_suffix}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -126,14 +126,14 @@ resource "aws_iam_role" "ci" {
 
 resource "aws_iam_role_policy" "ci" {
   count  = var.github_repo != "" ? 1 : 0
-  name   = "bisectr-ci"
+  name   = "bisectr-ci-${local.region_suffix}"
   role   = aws_iam_role.ci[0].id
   policy = local.ci_policy
 }
 
 resource "aws_iam_role" "gitlab_ci" {
   count = var.gitlab_project_path != "" ? 1 : 0
-  name  = "bisectr-gitlab-ci"
+  name  = "bisectr-gitlab-ci-${local.region_suffix}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -152,7 +152,7 @@ resource "aws_iam_role" "gitlab_ci" {
 
 resource "aws_iam_role_policy" "gitlab_ci" {
   count  = var.gitlab_project_path != "" ? 1 : 0
-  name   = "bisectr-gitlab-ci"
+  name   = "bisectr-gitlab-ci-${local.region_suffix}"
   role   = aws_iam_role.gitlab_ci[0].id
   policy = local.ci_policy
 }
