@@ -30,3 +30,8 @@ def users():
 @app.get("/orders")
 def orders():
     return {"orders": [{"id": i, "total": i * 3} for i in range(30)]}
+
+
+@app.post("/orders")
+def create_order(order: dict):
+    return {"accepted": True, "items": len(order.get("items", []))}

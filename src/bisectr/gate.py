@@ -4,10 +4,23 @@ from .cost import cost_report
 from .guardrails import check_enabled
 from .judge import Rep, judge, summarize
 from .probe import measure_many
+from .judge import p95
 
 
 def _reps(raw):
     return [Rep.from_dict(d) for d in raw]
+
+
+def _replica_summaries(reps):
+    return [
+        {
+            "p95": p95(rep.lat),
+            "error_rate": rep.err_rate,
+            "cpu_s_per_req": rep.cpu,
+            "peak_mem_mb": rep.mem,
+        }
+        for rep in reps
+    ]
 
 
 def run_gate(cfg, cand, base, use_cache=True) -> dict:
@@ -47,4 +60,6 @@ def run_gate(cfg, cand, base, use_cache=True) -> dict:
 
     return {"verdict": verdict, "reasons": reasons, "detail": detail, "cost": cost,
             "base": summarize(base_reps), "cand": summarize(cand_reps),
+            "base_replicas": _replica_summaries(base_reps),
+            "cand_replicas": _replica_summaries(cand_reps),
             "reprobed": reprobed, "replicas": cfg.replicas}

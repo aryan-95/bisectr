@@ -1,6 +1,6 @@
 import numpy as np
 from bisectr.config import Thresholds
-from bisectr.judge import Rep, judge
+from bisectr.judge import Rep, judge, summarize
 
 TH = Thresholds()
 
@@ -42,3 +42,13 @@ def test_tiny_absolute_difference_is_good():
     rng = np.random.default_rng(7)
     mk = lambda ms: [Rep(rng.lognormal(np.log(ms), 0.25, 600), 0, 600, 0.001, 100.0) for _ in range(3)]
     assert judge(mk(5.0), mk(5.9), TH)["verdict"] == "good"      # ratio ~1.18 but only ~1.4 ms
+
+
+def test_summary_reports_peak_memory_across_replicas():
+    reps = [rep(np.random.default_rng(i)) for i in range(3)]
+    reps[1].mem = 150.0
+
+    summary = summarize(reps)
+
+    assert summary["mem_mb"] == 150.0
+    assert set(summary["latency_quantiles_ms"]) == {"p50", "p90", "p95", "p99"}

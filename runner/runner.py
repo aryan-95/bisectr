@@ -3,22 +3,22 @@ import httpx
 
 PORT = os.getenv("PORT", "8000")
 BASE = f"http://localhost:{PORT}"
+HEALTH_PATH = os.getenv("HEALTH_PATH", "/health")
 RPS = int(os.getenv("RPS", "20"))
 SECONDS = int(os.getenv("SECONDS", "30"))
 WARMUP = int(os.getenv("WARMUP", "5"))
 EPS = json.loads(os.getenv("ENDPOINTS", '[{"path":"/users","weight":3},{"path":"/orders","weight":2}]'))
 META = os.getenv("ECS_CONTAINER_METADATA_URI_V4")
 
-PATHS = [e["path"] for e in EPS]
 WEIGHTS = [e["weight"] for e in EPS]
 
 
 async def wait_healthy(c):
     for _ in range(180):
         try:
-            if (await c.get(BASE + "/health")).status_code == 200:
+            if (await c.get(BASE + HEALTH_PATH)).status_code == 200:
                 return
-        except Exception:
+        except httpx.HTTPError:
             pass
         await asyncio.sleep(1)
     raise SystemExit("app never became healthy")
@@ -36,11 +36,19 @@ async def app_cpu_mem(c):
     return cpu, mem
 
 
-async def fire(c, path, sched, out):
+async def fire(c, endpoint, sched, out):
+    if isinstance(endpoint, str):
+        method, path, body = "GET", endpoint, None
+    else:
+        method = endpoint.get("method", "GET")
+        path, body = endpoint["path"], endpoint.get("body")
     try:
-        r = await c.get(BASE + path)
-        ok = r.status_code < 500
-    except Exception:
+        if method == "GET" and body is None:
+            r = await c.get(BASE + path)
+        else:
+            r = await c.request(method, BASE + path, json=body)
+        ok = r.status_code < 400
+    except httpx.HTTPError:
         ok = False
     # latency from the SCHEDULED send time -> no coordinated omission
     out.append(((time.perf_counter() - sched) * 1000, ok))
@@ -54,8 +62,8 @@ async def phase(c, secs, out):
         delay = sched - time.perf_counter()
         if delay > 0:
             await asyncio.sleep(delay)
-        tasks.append(asyncio.create_task(
-            fire(c, random.choices(PATHS, WEIGHTS)[0], sched, out)))
+        endpoint = random.choices(EPS, WEIGHTS)[0]
+        tasks.append(asyncio.create_task(fire(c, endpoint, sched, out)))
     await asyncio.gather(*tasks)
 
 
@@ -93,4 +101,5 @@ async def main():
     print("BISECTR_RESULT " + json.dumps(result), flush=True)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

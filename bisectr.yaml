@@ -1,5 +1,6 @@
 service: bisectr-demo
 port: 8000
+health_path: /health
 task:
   cpu: 1024
   memory: 2048
@@ -22,23 +23,26 @@ thresholds:
 cost:
   target_rps: 500
   target_utilization: 0.6
-  on_cost_regression: fail
+  on_cost_regression: warn
 pricing:
-  vcpu_hour: 0.04048
-  gb_hour: 0.004445
+  vcpu_hour: 0.0
+  gb_hour: 0.0
 replicas: 3
 max_probes: 24
-bisect_k: 2
+bisect_k: 3
 infra:
   region: ap-south-1
   cluster: bisectr
   log_group: /bisectr/probe
   exec_role: arn:aws:iam::196253396964:role/bisectr-exec
-  sg: sg-05dadfeeb667e2f02
+  sg: sg-047ec11a53b831cc4
   subnets:
   - subnet-0c56c4247007d3381
   - subnet-0c4f79a0cae04a5cb
   - subnet-02c5ba2c8dba5cc35
   image_repo: 196253396964.dkr.ecr.ap-south-1.amazonaws.com/bisectr-demo
   runner_image: 196253396964.dkr.ecr.ap-south-1.amazonaws.com/bisectr-runner:latest
-max_parallel_tasks: 8
+  runs_table: bisectr-runs
+  baseline_table: bisectr-baselines
+  reports_bucket: bisectr-reports-196253396964-ap-south-1
+  budget_name: bisectr-monthly

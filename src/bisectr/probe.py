@@ -25,8 +25,11 @@ def image_exists(cfg, tag: str) -> bool:
     try:
         _ecr(cfg.infra.region).describe_images(repositoryName=repo, imageIds=[{"imageTag": tag}])
         return True
-    except ClientError:
-        return False
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code in {"ImageNotFoundException", "RepositoryNotFoundException"}:
+            return False
+        raise
 
 
 def register(cfg, image: str, env: dict | None = None) -> str:
@@ -39,10 +42,12 @@ def register(cfg, image: str, env: dict | None = None) -> str:
 
     runner_env = [
         {"name": "PORT", "value": str(cfg.port)},
+        {"name": "HEALTH_PATH", "value": cfg.health_path},
         {"name": "RPS", "value": str(cfg.scenario.rps)},
         {"name": "SECONDS", "value": str(cfg.scenario.seconds)},
         {"name": "WARMUP", "value": str(cfg.scenario.warmup_seconds)},
-        {"name": "ENDPOINTS", "value": json.dumps(cfg.scenario.endpoints)},
+        {"name": "ENDPOINTS", "value": json.dumps(
+            [endpoint.model_dump(exclude_defaults=True) for endpoint in cfg.scenario.endpoints])},
     ]
     app_env = [{"name": k, "value": v} for k, v in (env or {}).items()]
     resp = _ecs(i.region).register_task_definition(
@@ -115,8 +120,8 @@ def wait_and_read(cfg, arn: str) -> dict:
 def stop(cfg, arn: str) -> None:
     try:
         _ecs(cfg.infra.region).stop_task(cluster=cfg.infra.cluster, task=arn, reason="bisectr cleanup")
-    except Exception:
-        pass
+    except ClientError as exc:
+        print(f"[bisectr] failed to stop probe task {arn}: {exc}", file=sys.stderr, flush=True)
 
 
 def run_one(cfg, task_def: str) -> dict:
@@ -125,7 +130,8 @@ def run_one(cfg, task_def: str) -> dict:
         return wait_and_read(cfg, arn)
     finally:
         stop(cfg, arn)
-        _ACTIVE.discard(arn)
+        with _lock:
+            _ACTIVE.discard(arn)
 
 
 def measure_many(cfg, specs: dict) -> dict:

@@ -7,6 +7,7 @@ v = lambda k: out[k]["value"]
 cfg = {
     "service": "bisectr-demo",
     "port": 8000,
+    "health_path": "/health",
     "task": {"cpu": 1024, "memory": 2048, "app_cpu": 512},
     "scenario": {
         "rps": 20, "seconds": 30, "warmup_seconds": 5,
@@ -23,6 +24,9 @@ cfg = {
         "region": v("region"), "cluster": v("cluster"), "log_group": v("log_group"),
         "exec_role": v("exec_role"), "sg": v("sg"), "subnets": v("subnets"),
         "image_repo": v("svc_repo"), "runner_image": v("runner_repo") + ":latest",
+        "runs_table": v("runs_table"), "baseline_table": v("baseline_table"),
+        "reports_bucket": v("reports_bucket"),
+        "budget_name": v("budget_name"),
     },
 }
 yaml.safe_dump(cfg, open("bisectr.yaml", "w"), sort_keys=False)

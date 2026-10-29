@@ -18,5 +18,14 @@ src/bisectr.egg-info/entry_points.txt
 src/bisectr.egg-info/requires.txt
 src/bisectr.egg-info/top_level.txt
 tests/test_bisect.py
+tests/test_bisect_noise.py
+tests/test_cli.py
 tests/test_cost.py
+tests/test_guardrails.py
 tests/test_judge.py
+tests/test_probe.py
+tests/test_probe_interrupt.py
+tests/test_report.py
+tests/test_report_validate_pr.py
+tests/test_runner.py
+tests/test_store.py

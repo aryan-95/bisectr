@@ -54,7 +54,11 @@ def summarize(reps: list[Rep]) -> dict:
     cpus = [r.cpu for r in reps if r.cpu is not None]
     return {
         "p95": p95(allv),
+        "latency_quantiles_ms": {
+            f"p{quantile}": float(np.percentile(allv, quantile))
+            for quantile in (50, 90, 95, 99)
+        },
         "err": float(np.mean([r.err_rate for r in reps])),
         "cpu_per_1000": float(np.median(cpus) * 1000) if cpus else None,
-        "mem_mb": float(np.median([r.mem for r in reps])),
+        "mem_mb": float(max(r.mem for r in reps)),
     }
